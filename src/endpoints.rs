@@ -15,15 +15,21 @@ use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
 #[get("/<files..>", rank = 2)]
-pub async fn index(files: PathBuf) -> Option<NamedFile> {
-    let path = Path::new("build/").join(files);
+pub async fn index(build_dir: &State<String>, files: PathBuf) -> Option<NamedFile> {
+    let path = Path::new(&**build_dir).join(files);
+
+    async fn open_index(build_path: &str) -> Option<NamedFile> {
+        NamedFile::open(Path::new(build_path).join("index.html"))
+            .await
+            .ok()
+    }
 
     if path.is_dir() {
-        NamedFile::open("build/index.html").await.ok()
+        open_index(&**build_dir).await
     } else {
         match NamedFile::open(path).await.ok() {
             Some(file) => Some(file),
-            None => NamedFile::open("build/index.html").await.ok(),
+            None => open_index(&**build_dir).await,
         }
     }
 }

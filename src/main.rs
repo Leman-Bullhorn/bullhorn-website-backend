@@ -15,6 +15,7 @@ use std::env;
 fn rocket() -> _ {
     let db_connection = establish_connection();
     let db_connection = std::sync::Mutex::new(db_connection);
+    let build_dir = env::var("BUILD_DIR").unwrap_or_else(|_| "build".into());
 
     rocket::build()
         .mount("/", routes![endpoints::index])
@@ -30,6 +31,7 @@ fn rocket() -> _ {
             ],
         )
         .manage(db_connection)
+        .manage(build_dir)
 }
 
 fn establish_connection() -> PgConnection {
