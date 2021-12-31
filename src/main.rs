@@ -27,7 +27,8 @@ fn rocket() -> _ {
                 endpoints::post_articles,
                 endpoints::get_writer,
                 endpoints::post_writers,
-                endpoints::fallback
+                endpoints::fallback,
+                endpoints::get_writer_by_name,
             ],
         )
         .manage(db_connection)

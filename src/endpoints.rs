@@ -14,7 +14,7 @@ use rocket::{get, post};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
-#[get("/<files..>", rank = 2)]
+#[get("/<files..>", rank = 10000)]
 pub async fn index(build_dir: &State<String>, files: PathBuf) -> Option<NamedFile> {
     let path = Path::new(&**build_dir).join(files);
 
@@ -61,7 +61,7 @@ pub fn post_writers(
     Ok(status::Created::new(location).body(Json(inserted_writer)))
 }
 
-#[get("/writers/<id>")]
+#[get("/writers/<id>", rank = 1)]
 pub fn get_writer(
     db_connection: &State<Mutex<PgConnection>>,
     id: i32,
@@ -75,6 +75,33 @@ pub fn get_writer(
         .map_err(|err| match err {
             DieselError::NotFound => {
                 APIError::new(Status::NotFound, format!("No writer with id {}.", id))
+            }
+            _ => APIError::from(err),
+        })
+}
+
+#[get("/writers/<name>", rank = 2)]
+pub fn get_writer_by_name(
+    db_connection: &State<Mutex<PgConnection>>,
+    name: &str,
+) -> Result<Json<ServerWriter>, APIError> {
+    use crate::schema::writers::dsl::{first_name, last_name, writers};
+
+    let (query_first_name, query_last_name) = name.split_once('-').ok_or_else(|| {
+        APIError::new(
+            Status::BadRequest,
+            "Name must be in the form \"firstName-LastName\"".into(),
+        )
+    })?;
+
+    writers
+        .filter(first_name.eq(query_first_name))
+        .filter(last_name.eq(query_last_name))
+        .first::<DBWriter>(&*db_connection.lock().unwrap())
+        .map(Json)
+        .map_err(|err| match err {
+            DieselError::NotFound => {
+                APIError::new(Status::NotFound, format!("No writer with name {}.", name))
             }
             _ => APIError::from(err),
         })
@@ -167,7 +194,7 @@ pub fn get_article(
     Ok(Json(ServerArticle::new(ret_article.0, ret_article.1)))
 }
 
-#[get("/<_..>")]
+#[get("/<_..>", rank = 9999)]
 pub fn fallback() -> APIError {
     APIError::new(Status::NotFound, "Invalid endpoint".into())
 }
