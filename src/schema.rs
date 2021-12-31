@@ -4,7 +4,7 @@ table! {
         headline -> Varchar,
         body -> Text,
         writer_id -> Int4,
-        publication_date -> Timestamp,
+        publication_date -> Timestamptz,
     }
 }
 

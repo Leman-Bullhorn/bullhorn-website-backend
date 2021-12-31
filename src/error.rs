@@ -1,4 +1,4 @@
-use chrono::{NaiveDateTime, Utc};
+use chrono::{DateTime, Utc};
 use diesel::result::Error as DieselError;
 use rocket::http::Status;
 use serde::Serialize;
@@ -7,14 +7,14 @@ use std::fmt::Display;
 
 #[derive(Debug)]
 pub struct APIError {
-    timestamp: NaiveDateTime,
+    timestamp: DateTime<Utc>,
     status: Status,
     message: String,
 }
 impl APIError {
     pub fn new(status: Status, message: String) -> Self {
         APIError {
-            timestamp: Utc::now().naive_utc(),
+            timestamp: Utc::now(),
             status,
             message,
         }
@@ -23,7 +23,7 @@ impl APIError {
 impl Default for APIError {
     fn default() -> Self {
         Self {
-            timestamp: Utc::now().naive_utc(),
+            timestamp: Utc::now(),
             status: Status::InternalServerError,
             message: "Something went wrong processing this request".into(),
         }

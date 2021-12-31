@@ -1,6 +1,6 @@
 use crate::schema::articles;
 use crate::writer::DBWriter;
-use chrono::NaiveDateTime;
+use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
 #[derive(Queryable, Debug, Serialize, Associations)]
@@ -11,7 +11,7 @@ pub struct DBArticle {
     pub headline: String,
     pub body: String,
     pub writer_id: i32,
-    pub publication_date: NaiveDateTime,
+    pub publication_date: DateTime<Utc>,
 }
 
 /// What the client receives when they request an article.
@@ -21,7 +21,7 @@ pub struct ServerArticle {
     pub headline: String,
     pub body: String,
     pub writer: DBWriter,
-    pub publication_date: NaiveDateTime,
+    pub publication_date: DateTime<Utc>,
 }
 
 impl ServerArticle {
