@@ -9,6 +9,7 @@ use rocket::http::Status;
 use rocket::response::status;
 use rocket::serde::json::Json;
 use rocket::uri;
+use rocket::FromForm;
 use rocket::State;
 use rocket::{get, post};
 use std::path::{Path, PathBuf};
@@ -152,7 +153,7 @@ pub fn post_articles(
     Ok(status::Created::new(location).body(Json(ret_article)))
 }
 
-#[get("/articles")]
+#[get("/articles", rank = 2)]
 pub fn get_articles(
     db_connection: &State<Mutex<PgConnection>>,
 ) -> Result<Json<Vec<ServerArticle>>, APIError> {
@@ -172,7 +173,7 @@ pub fn get_articles(
     Ok(Json(output))
 }
 
-#[get("/articles/<id>")]
+#[get("/articles/<id>", rank = 1)]
 pub fn get_article(
     db_connection: &State<Mutex<PgConnection>>,
     id: i32,
@@ -192,6 +193,54 @@ pub fn get_article(
         })?;
 
     Ok(Json(ServerArticle::new(ret_article.0, ret_article.1)))
+}
+
+#[derive(FromForm)]
+pub struct ArticleByWriterIdForm {
+    #[field(name = uncased("writerId"))]
+    #[field(name = "writer_id")]
+    writer_id: i32,
+}
+
+#[get("/articles?<query..>", rank = 1)]
+pub fn get_article_by_writer_id(
+    db_connection: &State<Mutex<PgConnection>>,
+    query: Option<ArticleByWriterIdForm>,
+) -> Result<Json<Vec<ServerArticle>>, APIError> {
+    use crate::schema::articles::dsl::{articles, writer_id};
+    use crate::schema::writers::dsl::{id as writer_table_id, writers};
+
+    let query = query
+        .ok_or_else(|| APIError::new(Status::BadRequest, "Writer id must be a number".into()))?;
+
+    let db_connection = &*db_connection.lock().unwrap();
+    if let Err(err) = writers
+        .filter(writer_table_id.eq(query.writer_id))
+        .first::<DBWriter>(db_connection)
+    {
+        match err {
+            DieselError::NotFound => {
+                return Err(APIError::new(
+                    Status::NotFound,
+                    format!("No writer with id {} found.", query.writer_id),
+                ))
+            }
+            _ => return Err(APIError::from(err)),
+        }
+    }
+
+    let ret_articles = articles
+        .filter(writer_id.eq(query.writer_id))
+        .inner_join(writers)
+        .load::<(DBArticle, DBWriter)>(db_connection)
+        .map_err(APIError::from)?;
+
+    Ok(Json(
+        ret_articles
+            .into_iter()
+            .map(|(article, writer)| ServerArticle::new(article, writer))
+            .collect::<Vec<ServerArticle>>(),
+    ))
 }
 
 #[get("/<_..>", rank = 9999)]
