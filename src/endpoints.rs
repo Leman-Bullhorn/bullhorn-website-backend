@@ -195,34 +195,25 @@ pub fn get_article(
     Ok(Json(ServerArticle::new(ret_article.0, ret_article.1)))
 }
 
-#[derive(FromForm)]
-pub struct ArticleByWriterIdForm {
-    #[field(name = uncased("writerId"))]
-    #[field(name = "writer_id")]
-    writer_id: i32,
-}
-
-#[get("/articles?<query..>", rank = 1)]
-pub fn get_article_by_writer_id(
+#[get("/writers/<id>/articles")]
+pub fn get_writer_id_articles(
     db_connection: &State<Mutex<PgConnection>>,
-    query: Option<ArticleByWriterIdForm>,
+    id: i32,
 ) -> Result<Json<Vec<ServerArticle>>, APIError> {
     use crate::schema::articles::dsl::{articles, writer_id};
     use crate::schema::writers::dsl::{id as writer_table_id, writers};
 
-    let query = query
-        .ok_or_else(|| APIError::new(Status::BadRequest, "Writer id must be a number".into()))?;
-
     let db_connection = &*db_connection.lock().unwrap();
+
     if let Err(err) = writers
-        .filter(writer_table_id.eq(query.writer_id))
+        .filter(writer_table_id.eq(id))
         .first::<DBWriter>(db_connection)
     {
         match err {
             DieselError::NotFound => {
                 return Err(APIError::new(
                     Status::NotFound,
-                    format!("No writer with id {} found.", query.writer_id),
+                    format!("No writer with id {} found.", id),
                 ))
             }
             _ => return Err(APIError::from(err)),
@@ -230,7 +221,7 @@ pub fn get_article_by_writer_id(
     }
 
     let ret_articles = articles
-        .filter(writer_id.eq(query.writer_id))
+        .filter(writer_id.eq(id))
         .inner_join(writers)
         .load::<(DBArticle, DBWriter)>(db_connection)
         .map_err(APIError::from)?;
