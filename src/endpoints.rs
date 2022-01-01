@@ -8,10 +8,7 @@ use rocket::fs::NamedFile;
 use rocket::http::Status;
 use rocket::response::status;
 use rocket::serde::json::Json;
-use rocket::uri;
-use rocket::FromForm;
-use rocket::State;
-use rocket::{get, post};
+use rocket::{get, post, uri, State};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -153,15 +150,20 @@ pub fn post_articles(
     Ok(status::Created::new(location).body(Json(ret_article)))
 }
 
-#[get("/articles", rank = 2)]
+#[get("/articles?<limit>", rank = 2)]
 pub fn get_articles(
     db_connection: &State<Mutex<PgConnection>>,
+    limit: Option<i64>,
 ) -> Result<Json<Vec<ServerArticle>>, APIError> {
-    use crate::schema::articles::dsl::articles;
+    use crate::schema::articles::dsl::{articles, publication_date};
     use crate::schema::writers::dsl::writers;
+
+    let limit = limit.unwrap_or(10);
 
     let ret_articles = articles
         .inner_join(writers)
+        .order(publication_date.desc())
+        .limit(limit)
         .load::<(DBArticle, DBWriter)>(&*db_connection.lock().unwrap())?;
 
     let mut output = Vec::with_capacity(ret_articles.len());
