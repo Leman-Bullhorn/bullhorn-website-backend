@@ -5,6 +5,7 @@ table! {
         body -> Text,
         writer_id -> Int4,
         publication_date -> Timestamptz,
+        preview -> Nullable<Text>,
     }
 }
 

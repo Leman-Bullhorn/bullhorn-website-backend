@@ -140,6 +140,7 @@ pub fn post_articles(
             articles::body.eq(article.body),
             articles::writer_id.eq(article.writer_id),
             articles::publication_date.eq(Utc::now().naive_utc()),
+            articles::preview.eq(article.preview),
         ))
         .get_results::<DBArticle>(db_connection)?
         .swap_remove(0);
