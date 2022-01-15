@@ -13,6 +13,7 @@ pub struct DBArticle {
     pub writer_id: i32,
     pub publication_date: DateTime<Utc>,
     pub preview: Option<String>,
+    pub image_url: Option<String>,
 }
 
 /// What the client receives when they request an article.
@@ -24,6 +25,7 @@ pub struct ServerArticle {
     pub writer: DBWriter,
     pub publication_date: DateTime<Utc>,
     pub preview: String,
+    pub image_url: String,
 }
 
 impl ServerArticle {
@@ -35,6 +37,7 @@ impl ServerArticle {
             writer,
             publication_date: article.publication_date,
             preview: article.preview.unwrap_or_default(),
+            image_url: article.image_url.unwrap_or_default(),
         }
     }
 }
@@ -46,4 +49,5 @@ pub struct ClientArticle<'a> {
     pub body: &'a str,
     pub writer_id: i32,
     pub preview: Option<&'a str>,
+    pub image_url: Option<&'a str>,
 }

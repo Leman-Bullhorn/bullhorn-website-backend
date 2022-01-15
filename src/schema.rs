@@ -6,6 +6,7 @@ table! {
         writer_id -> Int4,
         publication_date -> Timestamptz,
         preview -> Nullable<Text>,
+        image_url -> Nullable<Text>,
     }
 }
 

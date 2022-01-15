@@ -5,6 +5,7 @@ CREATE TABLE articles (
   writer_id int NOT NULL,
   publication_date TIMESTAMP WITH TIME ZONE NOT NULL,
   preview TEXT,
+  image_url TEXT,
   CONSTRAINT fk_writer
     FOREIGN KEY(writer_id)
       REFERENCES writers(id)
