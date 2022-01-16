@@ -11,6 +11,14 @@ table! {
 }
 
 table! {
+    sections (id) {
+        id -> Int4,
+        name -> Text,
+        permalink -> Text,
+    }
+}
+
+table! {
     writers (id) {
         id -> Int4,
         first_name -> Varchar,
@@ -24,5 +32,6 @@ joinable!(articles -> writers (writer_id));
 
 allow_tables_to_appear_in_same_query!(
     articles,
+    sections,
     writers,
 );
