@@ -1,5 +1,5 @@
-use crate::schema::articles;
 use crate::writer::DBWriter;
+use crate::{schema::articles, section::DBSection};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -11,6 +11,7 @@ pub struct DBArticle {
     pub headline: String,
     pub body: String,
     pub writer_id: i32,
+    pub section_id: i32,
     pub publication_date: DateTime<Utc>,
     pub preview: Option<String>,
     pub image_url: Option<String>,
@@ -23,18 +24,20 @@ pub struct ServerArticle {
     pub headline: String,
     pub body: String,
     pub writer: DBWriter,
+    pub section: DBSection,
     pub publication_date: DateTime<Utc>,
     pub preview: String,
     pub image_url: String,
 }
 
 impl ServerArticle {
-    pub fn new(article: DBArticle, writer: DBWriter) -> Self {
+    pub fn new(article: DBArticle, writer: DBWriter, section: DBSection) -> Self {
         ServerArticle {
             id: article.id,
             headline: article.headline,
             body: article.body,
             writer,
+            section,
             publication_date: article.publication_date,
             preview: article.preview.unwrap_or_default(),
             image_url: article.image_url.unwrap_or_default(),
@@ -48,6 +51,7 @@ pub struct ClientArticle<'a> {
     pub headline: &'a str,
     pub body: &'a str,
     pub writer_id: i32,
+    pub section_id: i32,
     pub preview: Option<&'a str>,
     pub image_url: Option<&'a str>,
 }

@@ -5,6 +5,7 @@ mod article;
 mod endpoints;
 mod error;
 mod schema;
+mod section;
 mod writer;
 
 use diesel::prelude::*;
@@ -30,6 +31,7 @@ fn rocket() -> _ {
                 endpoints::fallback,
                 endpoints::get_writer_by_name,
                 endpoints::get_writer_id_articles,
+                endpoints::get_sections,
             ],
         )
         .manage(db_connection)

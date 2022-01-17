@@ -1,5 +1,6 @@
 use crate::article::{ClientArticle, DBArticle, ServerArticle};
 use crate::error::APIError;
+use crate::section::{DBSection, ServerSection};
 use crate::writer::{ClientWriter, DBWriter, ServerWriter};
 use chrono::Utc;
 use diesel::prelude::*;
@@ -134,11 +135,23 @@ pub fn post_articles(
             _ => APIError::from(err),
         })?;
 
+    let section = sections::table
+        .filter(sections::id.eq(article.section_id))
+        .first::<DBSection>(db_connection)
+        .map_err(|err| match err {
+            DieselError::NotFound => APIError::new(
+                Status::NotFound,
+                format!("No section with id {} found.", article.section_id),
+            ),
+            _ => APIError::from(err),
+        })?;
+
     let inserted_article = diesel::insert_into(articles::table)
         .values((
             articles::headline.eq(article.headline),
             articles::body.eq(article.body),
             articles::writer_id.eq(article.writer_id),
+            articles::section_id.eq(article.section_id),
             articles::publication_date.eq(Utc::now().naive_utc()),
             articles::preview.eq(article.preview),
             articles::image_url.eq(article.image_url),
@@ -146,7 +159,7 @@ pub fn post_articles(
         .get_results::<DBArticle>(db_connection)?
         .swap_remove(0);
 
-    let ret_article = ServerArticle::new(inserted_article, writer);
+    let ret_article = ServerArticle::new(inserted_article, writer, section);
     let location = uri!("/api", get_article(ret_article.id)).to_string();
 
     Ok(status::Created::new(location).body(Json(ret_article)))
@@ -158,20 +171,22 @@ pub fn get_articles(
     limit: Option<i64>,
 ) -> Result<Json<Vec<ServerArticle>>, APIError> {
     use crate::schema::articles::dsl::{articles, publication_date};
+    use crate::schema::sections::dsl::sections;
     use crate::schema::writers::dsl::writers;
 
     let limit = limit.unwrap_or(10);
 
     let ret_articles = articles
         .inner_join(writers)
+        .inner_join(sections)
         .order(publication_date.desc())
         .limit(limit)
-        .load::<(DBArticle, DBWriter)>(&*db_connection.lock().unwrap())?;
+        .load::<(DBArticle, DBWriter, DBSection)>(&*db_connection.lock().unwrap())?;
 
     let mut output = Vec::with_capacity(ret_articles.len());
 
-    for (article, writer) in ret_articles {
-        output.push(ServerArticle::new(article, writer));
+    for (article, writer, section) in ret_articles {
+        output.push(ServerArticle::new(article, writer, section));
     }
 
     Ok(Json(output))
@@ -183,12 +198,14 @@ pub fn get_article(
     id: i32,
 ) -> Result<Json<ServerArticle>, APIError> {
     use crate::schema::articles::dsl::{articles, id as article_id};
+    use crate::schema::sections::dsl::sections;
     use crate::schema::writers::dsl::writers;
 
     let ret_article = articles
         .filter(article_id.eq(id))
         .inner_join(writers)
-        .first::<(DBArticle, DBWriter)>(&*db_connection.lock().unwrap())
+        .inner_join(sections)
+        .first::<(DBArticle, DBWriter, DBSection)>(&*db_connection.lock().unwrap())
         .map_err(|err| match err {
             DieselError::NotFound => {
                 APIError::new(Status::NotFound, format!("No article with id {}.", id))
@@ -196,7 +213,11 @@ pub fn get_article(
             _ => APIError::from(err),
         })?;
 
-    Ok(Json(ServerArticle::new(ret_article.0, ret_article.1)))
+    Ok(Json(ServerArticle::new(
+        ret_article.0,
+        ret_article.1,
+        ret_article.2,
+    )))
 }
 
 #[get("/writers/<id>/articles")]
@@ -205,6 +226,7 @@ pub fn get_writer_id_articles(
     id: i32,
 ) -> Result<Json<Vec<ServerArticle>>, APIError> {
     use crate::schema::articles::dsl::{articles, writer_id};
+    use crate::schema::sections::dsl::sections;
     use crate::schema::writers::dsl::{id as writer_table_id, writers};
 
     let db_connection = &*db_connection.lock().unwrap();
@@ -227,15 +249,28 @@ pub fn get_writer_id_articles(
     let ret_articles = articles
         .filter(writer_id.eq(id))
         .inner_join(writers)
-        .load::<(DBArticle, DBWriter)>(db_connection)
+        .inner_join(sections)
+        .load::<(DBArticle, DBWriter, DBSection)>(db_connection)
         .map_err(APIError::from)?;
 
     Ok(Json(
         ret_articles
             .into_iter()
-            .map(|(article, writer)| ServerArticle::new(article, writer))
+            .map(|(article, writer, section)| ServerArticle::new(article, writer, section))
             .collect::<Vec<ServerArticle>>(),
     ))
+}
+
+#[get("/sections")]
+pub fn get_sections(
+    db_connection: &State<Mutex<PgConnection>>,
+) -> Result<Json<Vec<ServerSection>>, APIError> {
+    use crate::schema::sections::dsl::sections;
+
+    sections
+        .load::<ServerSection>(&*db_connection.lock().unwrap())
+        .map_err(APIError::from)
+        .map(Json)
 }
 
 #[get("/<_..>", rank = 9999)]

@@ -4,6 +4,7 @@ table! {
         headline -> Varchar,
         body -> Text,
         writer_id -> Int4,
+        section_id -> Int4,
         publication_date -> Timestamptz,
         preview -> Nullable<Text>,
         image_url -> Nullable<Text>,
@@ -28,6 +29,7 @@ table! {
     }
 }
 
+joinable!(articles -> sections (section_id));
 joinable!(articles -> writers (writer_id));
 
 allow_tables_to_appear_in_same_query!(
