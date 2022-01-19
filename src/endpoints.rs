@@ -1,6 +1,6 @@
 use crate::article::{ClientArticle, DBArticle, ServerArticle};
 use crate::error::APIError;
-use crate::section::{DBSection, ServerSection};
+use crate::section::{ClientSection, DBSection, ServerSection};
 use crate::writer::{ClientWriter, DBWriter, ServerWriter};
 use chrono::Utc;
 use diesel::prelude::*;
@@ -271,6 +271,47 @@ pub fn get_sections(
         .load::<ServerSection>(&*db_connection.lock().unwrap())
         .map_err(APIError::from)
         .map(Json)
+}
+
+#[get("/section/<id>")]
+pub fn get_section(
+    db_connection: &State<Mutex<PgConnection>>,
+    id: i32,
+) -> Result<Json<ServerSection>, APIError> {
+    use crate::schema::sections::dsl::{id as section_id, sections};
+
+    sections
+        .filter(section_id.eq(id))
+        .first::<ServerSection>(&*db_connection.lock().unwrap())
+        .map_err(APIError::from)
+        .map(Json)
+}
+
+#[post("/sections", data = "<section>")]
+pub fn post_section(
+    db_connection: &State<Mutex<PgConnection>>,
+    section: Option<Json<ClientSection<'_>>>,
+) -> Result<status::Created<Json<ServerSection>>, APIError> {
+    use crate::schema::sections::dsl::sections;
+
+    let section = match section {
+        Some(section) => section,
+        None => {
+            return Err(APIError::new(
+                Status::BadRequest,
+                "Invalid section format.".into(),
+            ))
+        }
+    };
+
+    let inserted_section = diesel::insert_into(sections)
+        .values(section.into_inner())
+        .get_results::<DBSection>(&*db_connection.lock().unwrap())?
+        .swap_remove(0);
+
+    let location = uri!("/api", get_section(inserted_section.id)).to_string();
+
+    Ok(status::Created::new(location).body(Json(inserted_section)))
 }
 
 #[get("/<_..>", rank = 9999)]
