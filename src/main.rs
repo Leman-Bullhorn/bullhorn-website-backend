@@ -1,5 +1,3 @@
-#![feature(cow_is_borrowed)]
-
 #[macro_use]
 extern crate diesel;
 
@@ -36,6 +34,7 @@ fn rocket() -> _ {
                 endpoints::get_sections,
                 endpoints::get_section,
                 endpoints::post_section,
+                endpoints::get_article_by_slug,
             ],
         )
         .manage(db_connection)

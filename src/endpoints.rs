@@ -229,6 +229,34 @@ pub fn get_article(
     )))
 }
 
+#[get("/articles/<slug>", rank = 3)]
+pub fn get_article_by_slug(
+    db_connection: &State<Mutex<PgConnection>>,
+    slug: &str,
+) -> Result<Json<ServerArticle>, APIError> {
+    use crate::schema::articles::dsl::{articles, slug as article_slug};
+    use crate::schema::sections::dsl::sections;
+    use crate::schema::writers::dsl::writers;
+
+    let ret_article = articles
+        .filter(article_slug.eq(slug))
+        .inner_join(writers)
+        .inner_join(sections)
+        .first::<(DBArticle, DBWriter, DBSection)>(&*db_connection.lock().unwrap())
+        .map_err(|err| match err {
+            DieselError::NotFound => {
+                APIError::new(Status::NotFound, format!("No article with slug {}.", slug))
+            }
+            _ => APIError::from(err),
+        })?;
+
+    Ok(Json(ServerArticle::new(
+        ret_article.0,
+        ret_article.1,
+        ret_article.2,
+    )))
+}
+
 #[get("/writers/<id>/articles")]
 pub fn get_writer_id_articles(
     db_connection: &State<Mutex<PgConnection>>,
