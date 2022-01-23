@@ -1,6 +1,7 @@
 CREATE TABLE articles (
   id SERIAL PRIMARY KEY,
   headline VARCHAR NOT NULL,
+  slug TEXT NOT NULL,
   body TEXT NOT NULL,
   writer_id int NOT NULL,
   section_id int NOT NULL,

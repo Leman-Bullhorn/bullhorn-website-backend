@@ -9,6 +9,7 @@ use serde::{Deserialize, Serialize};
 pub struct DBArticle {
     pub id: i32,
     pub headline: String,
+    pub slug: String,
     pub body: String,
     pub writer_id: i32,
     pub section_id: i32,
@@ -22,6 +23,7 @@ pub struct DBArticle {
 pub struct ServerArticle {
     pub id: i32,
     pub headline: String,
+    pub slug: String,
     pub body: String,
     pub writer: DBWriter,
     pub section: DBSection,
@@ -35,6 +37,7 @@ impl ServerArticle {
         ServerArticle {
             id: article.id,
             headline: article.headline,
+            slug: article.slug,
             body: article.body,
             writer,
             section,

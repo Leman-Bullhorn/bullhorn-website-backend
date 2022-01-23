@@ -13,6 +13,10 @@ use rocket::{get, post, uri, State};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
+lazy_static::lazy_static! {
+    static ref SLUG_REGEX: regex::Regex = regex::Regex::new("/[^A-Za-z0-9 -]/g").unwrap();
+}
+
 #[get("/<files..>", rank = 10000)]
 pub async fn index(build_dir: &State<String>, files: PathBuf) -> Option<NamedFile> {
     let path = Path::new(&**build_dir).join(files);
@@ -146,9 +150,14 @@ pub fn post_articles(
             _ => APIError::from(err),
         })?;
 
+    let mut slug = article.headline.replace(' ', "-");
+    slug.make_ascii_lowercase();
+    let slug = SLUG_REGEX.replace_all(&slug, "");
+
     let inserted_article = diesel::insert_into(articles::table)
         .values((
             articles::headline.eq(article.headline),
+            articles::slug.eq(slug),
             articles::body.eq(article.body),
             articles::writer_id.eq(article.writer_id),
             articles::section_id.eq(article.section_id),

@@ -1,3 +1,5 @@
+#![feature(cow_is_borrowed)]
+
 #[macro_use]
 extern crate diesel;
 

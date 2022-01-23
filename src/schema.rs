@@ -2,6 +2,7 @@ table! {
     articles (id) {
         id -> Int4,
         headline -> Varchar,
+        slug -> Text,
         body -> Text,
         writer_id -> Int4,
         section_id -> Int4,

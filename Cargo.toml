@@ -11,3 +11,9 @@ dotenv = "0.15.0"
 diesel = { version = "1.4.8", features = ["postgres", "chrono"] }
 serde = "1.0"
 chrono = { version = "0.4.19", features = ["serde"] }
+lazy_static = "1.4"
+
+[dependencies.regex]
+version = "1.5"
+default-features = false
+features = ["std", "perf", "perf-dfa", "perf-inline", "perf-literal", "perf-cache"]
