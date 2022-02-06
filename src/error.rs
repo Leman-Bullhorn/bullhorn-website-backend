@@ -19,6 +19,13 @@ impl APIError {
             message,
         }
     }
+
+    pub fn unauthorized() -> Self {
+        APIError::new(
+            Status::Unauthorized,
+            "Must be an admin or higher to access this endpoint.".into(),
+        )
+    }
 }
 impl Default for APIError {
     fn default() -> Self {

@@ -1,5 +1,5 @@
 use crate::article::{ClientArticle, DBArticle, ServerArticle};
-use crate::auth::{create_jwt, LoginInfo, LoginResponse, Role};
+use crate::auth::{create_jwt, AdminUser, LoginInfo, LoginResponse, Role};
 use crate::error::APIError;
 use crate::section::{ClientSection, DBSection, ServerSection};
 use crate::writer::{ClientWriter, DBWriter, ServerWriter};
@@ -329,8 +329,11 @@ pub fn get_section(
 pub fn post_section(
     db_connection: &State<Mutex<PgConnection>>,
     section: Option<Json<ClientSection<'_>>>,
+    user: Option<AdminUser>,
 ) -> Result<status::Created<Json<ServerSection>>, APIError> {
     use crate::schema::sections::dsl::sections;
+
+    user.ok_or_else(APIError::unauthorized)?;
 
     let section = match section {
         Some(section) => section,
