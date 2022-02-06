@@ -73,9 +73,8 @@ pub struct LoginResponse {
 pub fn create_jwt(role: Role) -> Result<String> {
     let jwt_secret = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
-    // make the expiration time 60 seconds from now for testing.
     let expiration = Utc::now()
-        .checked_add_signed(chrono::Duration::seconds(60))
+        .checked_add_signed(chrono::Duration::minutes(90))
         .expect("valid timestamp")
         .timestamp();
 
