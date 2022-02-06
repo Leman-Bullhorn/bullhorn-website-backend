@@ -12,6 +12,7 @@ diesel = { version = "1.4.8", features = ["postgres", "chrono"] }
 serde = "1.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 lazy_static = "1.4"
+jsonwebtoken = {version = "8", default-features = false }
 
 [dependencies.regex]
 version = "1.5"

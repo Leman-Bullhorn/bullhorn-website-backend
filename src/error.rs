@@ -29,17 +29,6 @@ impl Default for APIError {
         }
     }
 }
-impl From<DieselError> for APIError {
-    fn from(err: DieselError) -> Self {
-        match err {
-            DieselError::NotFound => APIError::new(
-                Status::NotFound,
-                "Something went wrong processing this request.".into(),
-            ),
-            _ => Default::default(),
-        }
-    }
-}
 impl Display for APIError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.debug_struct("BackendError")
@@ -72,5 +61,17 @@ impl<'r> rocket::response::Responder<'r, 'static> for APIError {
         rocket::Response::build_from(rocket::serde::json::Json(self).respond_to(request)?)
             .status(status)
             .ok()
+    }
+}
+
+impl From<DieselError> for APIError {
+    fn from(err: DieselError) -> Self {
+        match err {
+            DieselError::NotFound => APIError::new(
+                Status::NotFound,
+                "Something went wrong processing this request.".into(),
+            ),
+            _ => Default::default(),
+        }
     }
 }

@@ -2,6 +2,7 @@
 extern crate diesel;
 
 mod article;
+mod auth;
 mod endpoints;
 mod error;
 mod schema;
@@ -35,6 +36,7 @@ fn rocket() -> _ {
                 endpoints::get_section,
                 endpoints::post_section,
                 endpoints::get_article_by_slug,
+                endpoints::login,
             ],
         )
         .manage(db_connection)

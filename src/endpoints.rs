@@ -1,4 +1,5 @@
 use crate::article::{ClientArticle, DBArticle, ServerArticle};
+use crate::auth::{create_jwt, LoginInfo, LoginResponse, Role};
 use crate::error::APIError;
 use crate::section::{ClientSection, DBSection, ServerSection};
 use crate::writer::{ClientWriter, DBWriter, ServerWriter};
@@ -349,6 +350,33 @@ pub fn post_section(
     let location = uri!("/api", get_section(inserted_section.id)).to_string();
 
     Ok(status::Created::new(location).body(Json(inserted_section)))
+}
+
+#[post("/login", data = "<login_info>")]
+pub fn login(login_info: Option<Json<LoginInfo<'_>>>) -> Result<Json<LoginResponse>, APIError> {
+    let login_info = match login_info {
+        Some(login_info) => login_info,
+        None => {
+            return Err(APIError::new(
+                Status::BadRequest,
+                "Missing login information.".into(),
+            ))
+        }
+    };
+
+    let admin_username = std::env::var("ADMIN_USERNAME").expect("ADMIN_USERNAME must be defined");
+    let admin_password = std::env::var("ADMIN_PASSWORD").expect("ADMIN_PASSWORD must be defined");
+
+    if login_info.username == admin_username && login_info.password == admin_password {
+        create_jwt(Role::Admin)
+            .map(|access_token| Json(LoginResponse { access_token }))
+            .map_err(|_| APIError::default())
+    } else {
+        Err(APIError::new(
+            Status::Unauthorized,
+            "Invalid username or password.".into(),
+        ))
+    }
 }
 
 #[get("/<_..>", rank = 9999)]
