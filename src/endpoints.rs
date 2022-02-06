@@ -93,7 +93,7 @@ pub fn get_writer_by_name(
     let (query_first_name, query_last_name) = name.split_once('-').ok_or_else(|| {
         APIError::new(
             Status::BadRequest,
-            "Name must be in the form \"firstName-LastName\"".into(),
+            "Name must be in the form \"firstName-LastName\".".into(),
         )
     })?;
 
@@ -353,5 +353,5 @@ pub fn post_section(
 
 #[get("/<_..>", rank = 9999)]
 pub fn fallback() -> APIError {
-    APIError::new(Status::NotFound, "Invalid endpoint".into())
+    APIError::new(Status::NotFound, "Invalid endpoint.".into())
 }
