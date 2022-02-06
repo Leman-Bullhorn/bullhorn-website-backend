@@ -42,8 +42,11 @@ pub async fn index(build_dir: &State<String>, files: PathBuf) -> Option<NamedFil
 pub fn post_writers(
     db_connection: &State<Mutex<PgConnection>>,
     writer: Option<Json<ClientWriter<'_>>>,
+    user: Option<AdminUser>,
 ) -> Result<status::Created<Json<ServerWriter>>, APIError> {
     use crate::schema::writers::dsl::writers;
+
+    user.ok_or_else(APIError::unauthorized)?;
 
     let writer = match writer {
         Some(article) => article,
@@ -115,8 +118,11 @@ pub fn get_writer_by_name(
 pub fn post_articles(
     db_connection: &State<Mutex<PgConnection>>,
     article: Option<Json<ClientArticle<'_>>>,
+    user: Option<AdminUser>,
 ) -> Result<status::Created<Json<ServerArticle>>, APIError> {
     use crate::schema::*;
+
+    user.ok_or_else(APIError::unauthorized)?;
 
     let article = match article {
         Some(article) => article,
