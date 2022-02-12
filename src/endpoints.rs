@@ -1,5 +1,5 @@
 use crate::article::{ClientArticle, DBArticle, ServerArticle};
-use crate::auth::{create_jwt, AdminUser, LoginInfo, LoginResponse, Role};
+use crate::auth::{create_jwt, AdminUser, LoginInfo, Role, COOKIE_SESSION_TOKEN};
 use crate::error::APIError;
 use crate::section::{ClientSection, DBSection, ServerSection};
 use crate::writer::{ClientWriter, DBWriter, ServerWriter};
@@ -7,7 +7,7 @@ use chrono::Utc;
 use diesel::prelude::*;
 use diesel::result::Error as DieselError;
 use rocket::fs::NamedFile;
-use rocket::http::Status;
+use rocket::http::{Cookie, CookieJar, SameSite, Status};
 use rocket::response::status;
 use rocket::serde::json::Json;
 use rocket::{get, post, uri, State};
@@ -112,6 +112,47 @@ pub fn get_writer_by_name(
             }
             _ => APIError::from(err),
         })
+}
+
+#[get("/writers/<id>/articles")]
+pub fn get_writer_id_articles(
+    db_connection: &State<Mutex<PgConnection>>,
+    id: i32,
+) -> Result<Json<Vec<ServerArticle>>, APIError> {
+    use crate::schema::articles::dsl::{articles, writer_id};
+    use crate::schema::sections::dsl::sections;
+    use crate::schema::writers::dsl::{id as writer_table_id, writers};
+
+    let db_connection = &*db_connection.lock().unwrap();
+
+    if let Err(err) = writers
+        .filter(writer_table_id.eq(id))
+        .first::<DBWriter>(db_connection)
+    {
+        match err {
+            DieselError::NotFound => {
+                return Err(APIError::new(
+                    Status::NotFound,
+                    format!("No writer with id {} found.", id),
+                ))
+            }
+            _ => return Err(APIError::from(err)),
+        }
+    }
+
+    let ret_articles = articles
+        .filter(writer_id.eq(id))
+        .inner_join(writers)
+        .inner_join(sections)
+        .load::<(DBArticle, DBWriter, DBSection)>(db_connection)
+        .map_err(APIError::from)?;
+
+    Ok(Json(
+        ret_articles
+            .into_iter()
+            .map(|(article, writer, section)| ServerArticle::new(article, writer, section))
+            .collect::<Vec<ServerArticle>>(),
+    ))
 }
 
 #[post("/articles", data = "<article>")]
@@ -264,47 +305,6 @@ pub fn get_article_by_slug(
     )))
 }
 
-#[get("/writers/<id>/articles")]
-pub fn get_writer_id_articles(
-    db_connection: &State<Mutex<PgConnection>>,
-    id: i32,
-) -> Result<Json<Vec<ServerArticle>>, APIError> {
-    use crate::schema::articles::dsl::{articles, writer_id};
-    use crate::schema::sections::dsl::sections;
-    use crate::schema::writers::dsl::{id as writer_table_id, writers};
-
-    let db_connection = &*db_connection.lock().unwrap();
-
-    if let Err(err) = writers
-        .filter(writer_table_id.eq(id))
-        .first::<DBWriter>(db_connection)
-    {
-        match err {
-            DieselError::NotFound => {
-                return Err(APIError::new(
-                    Status::NotFound,
-                    format!("No writer with id {} found.", id),
-                ))
-            }
-            _ => return Err(APIError::from(err)),
-        }
-    }
-
-    let ret_articles = articles
-        .filter(writer_id.eq(id))
-        .inner_join(writers)
-        .inner_join(sections)
-        .load::<(DBArticle, DBWriter, DBSection)>(db_connection)
-        .map_err(APIError::from)?;
-
-    Ok(Json(
-        ret_articles
-            .into_iter()
-            .map(|(article, writer, section)| ServerArticle::new(article, writer, section))
-            .collect::<Vec<ServerArticle>>(),
-    ))
-}
-
 #[get("/sections")]
 pub fn get_sections(
     db_connection: &State<Mutex<PgConnection>>,
@@ -362,7 +362,10 @@ pub fn post_section(
 }
 
 #[post("/login", data = "<login_info>")]
-pub fn login(login_info: Option<Json<LoginInfo<'_>>>) -> Result<Json<LoginResponse>, APIError> {
+pub fn login(
+    jar: &CookieJar<'_>,
+    login_info: Option<Json<LoginInfo<'_>>>,
+) -> Result<&'static str, APIError> {
     let login_info = match login_info {
         Some(login_info) => login_info,
         None => {
@@ -378,13 +381,30 @@ pub fn login(login_info: Option<Json<LoginInfo<'_>>>) -> Result<Json<LoginRespon
 
     if login_info.username == admin_username && login_info.password == admin_password {
         create_jwt(Role::Admin)
-            .map(|access_token| Json(LoginResponse { access_token }))
+            .map(|token| {
+                let cookie = Cookie::build(COOKIE_SESSION_TOKEN, token)
+                    .secure(true)
+                    .http_only(true)
+                    .same_site(SameSite::Strict);
+
+                jar.add(cookie.finish());
+
+                "Admin"
+            })
             .map_err(|_| APIError::default())
     } else {
         Err(APIError::new(
             Status::Unauthorized,
             "Invalid username or password.".into(),
         ))
+    }
+}
+
+#[get("/current")]
+pub fn current_role(user: Option<AdminUser>) -> &'static str {
+    match user {
+        Some(_) => "Admin",
+        None => "Default",
     }
 }
 

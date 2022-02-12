@@ -2,11 +2,10 @@ use crate::error::APIError;
 use chrono::Utc;
 use jsonwebtoken::errors::Result;
 use jsonwebtoken::{decode, encode, Algorithm, DecodingKey, EncodingKey, Header, Validation};
-use rocket::http::hyper::header::AUTHORIZATION;
 use rocket::request::{FromRequest, Outcome, Request};
 use serde::{Deserialize, Serialize};
 
-const BEARER: &str = "Bearer ";
+pub const COOKIE_SESSION_TOKEN: &str = "session_token";
 
 pub struct AdminUser;
 
@@ -16,21 +15,13 @@ impl<'r> FromRequest<'r> for AdminUser {
     async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
         let jwt_secret = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
-        // is authorization header present
-        let authorization_header = match req.headers().get_one(AUTHORIZATION.as_str()) {
-            Some(header) => header,
+        let jwt = match req.cookies().get(COOKIE_SESSION_TOKEN) {
+            Some(jwt) => jwt.value(),
             None => return Outcome::Forward(()),
         };
 
-        // Authorization header is malformed
-        if !authorization_header.starts_with(BEARER) {
-            return Outcome::Forward(());
-        }
-
-        let jwt = authorization_header.trim_start_matches(BEARER).to_owned();
-
         match decode::<Claims>(
-            &jwt,
+            jwt,
             &DecodingKey::from_secret(jwt_secret.as_bytes()),
             &Validation::new(Algorithm::HS512),
         ) {
@@ -63,11 +54,6 @@ pub enum Role {
 pub struct LoginInfo<'a> {
     pub username: &'a str,
     pub password: &'a str,
-}
-
-#[derive(Serialize)]
-pub struct LoginResponse {
-    pub access_token: String,
 }
 
 pub fn create_jwt(role: Role) -> Result<String> {
