@@ -10,7 +10,7 @@ use rocket::fs::NamedFile;
 use rocket::http::{Cookie, CookieJar, SameSite, Status};
 use rocket::response::status;
 use rocket::serde::json::Json;
-use rocket::{get, post, uri, State};
+use rocket::{delete, get, post, uri, State};
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -247,6 +247,36 @@ pub fn get_articles(
     }
 
     Ok(Json(output))
+}
+
+#[delete("/articles/<id>")]
+pub fn delete_article(
+    db_connection: &State<Mutex<PgConnection>>,
+    id: i32,
+    user: Option<AdminUser>,
+) -> Result<status::Accepted<()>, APIError> {
+    use crate::schema::articles::dsl::{articles, id as article_id};
+    use std::cmp::Ordering;
+
+    user.ok_or_else(APIError::unauthorized)?;
+
+    let deleted_count = diesel::delete(articles.filter(article_id.eq(id)))
+        .execute(&*db_connection.lock().unwrap())?;
+
+    match deleted_count.cmp(&1) {
+        Ordering::Greater => {
+            println!("Deleted more than 1 article... something has gone very wrong");
+        }
+        Ordering::Less => {
+            return Err(APIError::new(
+                Status::NotFound,
+                format!("No article with id {id}"),
+            ))
+        }
+        Ordering::Equal => {}
+    }
+
+    Ok(status::Accepted(Some(())))
 }
 
 #[get("/articles/<id>", rank = 1)]
