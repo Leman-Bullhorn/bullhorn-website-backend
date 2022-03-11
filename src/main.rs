@@ -38,7 +38,8 @@ fn rocket() -> _ {
                 endpoints::get_article_by_slug,
                 endpoints::login,
                 endpoints::current_role,
-                endpoints::delete_article
+                endpoints::delete_article,
+                endpoints::get_writers
             ],
         )
         .manage(db_connection)

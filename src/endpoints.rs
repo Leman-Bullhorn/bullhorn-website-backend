@@ -68,6 +68,18 @@ pub fn post_writers(
     Ok(status::Created::new(location).body(Json(inserted_writer)))
 }
 
+#[get("/writers")]
+pub fn get_writers(
+    db_connection: &State<Mutex<PgConnection>>,
+) -> Result<Json<Vec<ServerWriter>>, APIError> {
+    use crate::schema::writers::dsl::writers;
+
+    writers
+        .load::<DBWriter>(&*db_connection.lock().unwrap())
+        .map(Json)
+        .map_err(APIError::from)
+}
+
 #[get("/writers/<id>", rank = 1)]
 pub fn get_writer(
     db_connection: &State<Mutex<PgConnection>>,
