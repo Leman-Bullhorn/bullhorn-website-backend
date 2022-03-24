@@ -1,6 +1,7 @@
 use crate::article::{ClientArticle, DBArticle, ServerArticle};
 use crate::auth::{create_jwt, AdminUser, LoginInfo, Role, COOKIE_SESSION_TOKEN};
 use crate::error::APIError;
+use crate::paginated::Paginated;
 use crate::section::{ClientSection, DBSection, ServerSection};
 use crate::writer::{ClientWriter, DBWriter, ServerWriter};
 use chrono::Utc;
@@ -234,23 +235,36 @@ pub fn post_articles(
     Ok(status::Created::new(location).body(Json(ret_article)))
 }
 
-#[get("/articles?<limit>", rank = 2)]
+#[get("/articles?<limit>&<page>", rank = 2)]
 pub fn get_articles(
     db_connection: &State<Mutex<PgConnection>>,
     limit: Option<i64>,
-) -> Result<Json<Vec<ServerArticle>>, APIError> {
+    page: Option<i64>,
+) -> Result<Paginated<Vec<ServerArticle>>, APIError> {
     use crate::schema::articles::dsl::{articles, publication_date};
     use crate::schema::sections::dsl::sections;
     use crate::schema::writers::dsl::writers;
 
     let limit = limit.unwrap_or(10);
+    let page = page.unwrap_or(1);
+    if page <= 0 {
+        return Err(APIError::new(
+            Status::BadRequest,
+            "Page must be positive".into(),
+        ));
+    }
+
+    let connection = &*db_connection.lock().unwrap();
+
+    let article_count: i64 = articles.count().get_result(connection)?;
 
     let ret_articles = articles
         .inner_join(writers)
         .inner_join(sections)
         .order(publication_date.desc())
+        .offset((page - 1) * limit)
         .limit(limit)
-        .load::<(DBArticle, DBWriter, DBSection)>(&*db_connection.lock().unwrap())?;
+        .load::<(DBArticle, DBWriter, DBSection)>(connection)?;
 
     let mut output = Vec::with_capacity(ret_articles.len());
 
@@ -258,7 +272,7 @@ pub fn get_articles(
         output.push(ServerArticle::new(article, writer, section));
     }
 
-    Ok(Json(output))
+    Ok(Paginated::new(output, limit, page, article_count))
 }
 
 #[delete("/articles/<id>")]
@@ -425,7 +439,7 @@ pub fn login(
         create_jwt(Role::Admin)
             .map(|token| {
                 let cookie = Cookie::build(COOKIE_SESSION_TOKEN, token)
-                    .secure(true)
+                    .secure(false)
                     .http_only(true)
                     .same_site(SameSite::Strict);
 

@@ -5,6 +5,7 @@ mod article;
 mod auth;
 mod endpoints;
 mod error;
+mod paginated;
 mod schema;
 mod section;
 mod writer;
