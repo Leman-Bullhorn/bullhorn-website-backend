@@ -439,7 +439,7 @@ pub fn login(
         create_jwt(Role::Admin)
             .map(|token| {
                 let cookie = Cookie::build(COOKIE_SESSION_TOKEN, token)
-                    .secure(false)
+                    .secure(true)
                     .http_only(true)
                     .same_site(SameSite::Strict);
 
