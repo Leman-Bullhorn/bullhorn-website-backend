@@ -219,7 +219,7 @@ pub fn post_articles(
         .values((
             articles::headline.eq(article.headline),
             articles::slug.eq(slug),
-            articles::body.eq(article.body),
+            articles::body.eq(&article.body),
             articles::writer_id.eq(article.writer_id),
             articles::section_id.eq(article.section_id),
             articles::publication_date.eq(Utc::now().naive_utc()),

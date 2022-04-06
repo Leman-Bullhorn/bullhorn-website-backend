@@ -1,3 +1,5 @@
+use std::borrow::Cow;
+
 use crate::writer::DBWriter;
 use crate::{schema::articles, section::DBSection};
 use chrono::{DateTime, Utc};
@@ -52,7 +54,8 @@ impl ServerArticle {
 #[derive(Deserialize, Debug)]
 pub struct ClientArticle<'a> {
     pub headline: &'a str,
-    pub body: &'a str,
+    #[serde(borrow)]
+    pub body: Cow<'a, str>,
     pub writer_id: i32,
     pub section_id: i32,
     pub preview: Option<&'a str>,
