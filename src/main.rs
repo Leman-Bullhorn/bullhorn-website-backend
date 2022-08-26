@@ -5,6 +5,7 @@ mod article;
 mod auth;
 mod endpoints;
 mod error;
+mod gdrive;
 mod paginated;
 mod schema;
 mod section;
@@ -13,12 +14,17 @@ mod writer;
 use diesel::prelude::*;
 use rocket::{launch, routes};
 use std::env;
+use std::sync::Mutex;
 
 #[launch]
-fn rocket() -> _ {
-    let db_connection = establish_connection();
-    let db_connection = std::sync::Mutex::new(db_connection);
+async fn rocket() -> _ {
+    let db_connection = Mutex::new(establish_connection());
     let build_dir = env::var("BUILD_DIR").unwrap_or_else(|_| "build".into());
+
+    let client_secret_path = env::var("CLIENT_SECRET_PATH")
+        .expect("environment variable 'CLIENT_SECRET_PATH' should be set");
+
+    let file_service = gdrive::make_files_service(client_secret_path).await;
 
     rocket::build()
         .mount("/", routes![endpoints::index])
@@ -40,11 +46,16 @@ fn rocket() -> _ {
                 endpoints::login,
                 endpoints::current_role,
                 endpoints::delete_article,
-                endpoints::get_writers
+                endpoints::get_writers,
+                endpoints::get_drive_drafts,
+                endpoints::get_drive_finals,
+                endpoints::move_draft_to_final,
+                endpoints::move_final_to_draft,
             ],
         )
         .manage(db_connection)
         .manage(build_dir)
+        .manage(file_service)
 }
 
 fn establish_connection() -> PgConnection {

@@ -2,3 +2,5 @@
 .env
 .DS_STORE
 /build
+tokencache.json
+client_secret.json

@@ -82,3 +82,11 @@ impl From<DieselError> for APIError {
         }
     }
 }
+
+impl From<anyhow::Error> for APIError {
+    fn from(err: anyhow::Error) -> Self {
+        APIError::new(Status::InternalServerError, err.root_cause().to_string())
+    }
+}
+
+pub type APIResult<T> = Result<T, APIError>;

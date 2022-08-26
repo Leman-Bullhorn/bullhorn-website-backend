@@ -1,6 +1,8 @@
 use crate::article::{ClientArticle, DBArticle, ServerArticle};
 use crate::auth::{create_jwt, AdminUser, LoginInfo, Role, COOKIE_SESSION_TOKEN};
-use crate::error::APIError;
+use crate::error::{APIError, APIResult};
+use crate::gdrive::drive_v3_types::FilesService;
+use crate::gdrive::{self, ServerDriveFile};
 use crate::paginated::Paginated;
 use crate::section::{ClientSection, DBSection, ServerSection};
 use crate::writer::{ClientWriter, DBWriter, ServerWriter};
@@ -462,6 +464,80 @@ pub fn current_role(user: Option<AdminUser>) -> &'static str {
         Some(_) => "Admin",
         None => "Default",
     }
+}
+
+#[get("/drive/drafts")]
+pub async fn get_drive_drafts(
+    files_service: &State<FilesService>,
+    user: Option<AdminUser>,
+) -> APIResult<Json<Vec<ServerDriveFile>>> {
+    user.ok_or_else(APIError::unauthorized)?;
+
+    gdrive::get_files_from_draft_folder(files_service)
+        .await
+        .map_err(Into::into)
+        .map(Json)
+}
+
+#[get("/drive/finals")]
+pub async fn get_drive_finals(
+    files_service: &State<FilesService>,
+    user: Option<AdminUser>,
+) -> APIResult<Json<Vec<ServerDriveFile>>> {
+    user.ok_or_else(APIError::unauthorized)?;
+
+    gdrive::get_files_from_finals_folder(files_service)
+        .await
+        .map_err(Into::into)
+        .map(Json)
+}
+
+#[post("/drive/final/<file_id>")]
+pub async fn move_draft_to_final(
+    files_service: &State<FilesService>,
+    file_id: &str,
+    user: Option<AdminUser>,
+) -> APIResult<Json<ServerDriveFile>> {
+    user.ok_or_else(APIError::unauthorized)?;
+
+    let draft_files = gdrive::get_files_from_draft_folder(files_service).await?;
+
+    let file_id_in_drafts = draft_files.iter().any(|file| file.id == file_id);
+    if !file_id_in_drafts {
+        return Err(APIError::new(
+            Status::NotFound,
+            "File not found in drafts folder.".into(),
+        ));
+    }
+
+    gdrive::move_file_to_final(files_service, file_id)
+        .await
+        .map_err(Into::into)
+        .map(Json)
+}
+
+#[post("/drive/draft/<file_id>")]
+pub async fn move_final_to_draft(
+    files_service: &State<FilesService>,
+    file_id: &str,
+    user: Option<AdminUser>,
+) -> APIResult<Json<ServerDriveFile>> {
+    user.ok_or_else(APIError::unauthorized)?;
+
+    let final_files = gdrive::get_files_from_finals_folder(files_service).await?;
+
+    let file_id_in_finals = final_files.iter().any(|file| file.id == file_id);
+    if !file_id_in_finals {
+        return Err(APIError::new(
+            Status::NotFound,
+            "File not found in finals folder.".into(),
+        ));
+    }
+
+    gdrive::move_file_to_draft(files_service, file_id)
+        .await
+        .map_err(Into::into)
+        .map(Json)
 }
 
 #[get("/<_..>", rank = 9999)]

@@ -12,7 +12,10 @@ diesel = { version = "1.4.8", features = ["postgres", "chrono"] }
 serde = "1.0"
 chrono = { version = "0.4.19", features = ["serde"] }
 lazy_static = "1.4"
-jsonwebtoken = {version = "8", default-features = false }
+jsonwebtoken = { version = "8", default-features = false }
+async-google-apis-common = "0.3"
+hyper-rustls = { version = "0.22", features = ["rustls-native-certs"] }
+anyhow = "1.0.62"
 
 [dependencies.regex]
 version = "1.5"
