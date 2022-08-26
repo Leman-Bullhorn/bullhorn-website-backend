@@ -41,7 +41,7 @@ impl<'r> FromRequest<'r> for AdminUser {
 #[derive(Serialize, Deserialize)]
 struct Claims {
     role: Role,
-    exp: usize,
+    exp: i64,
 }
 
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
@@ -59,15 +59,12 @@ pub struct LoginInfo<'a> {
 pub fn create_jwt(role: Role) -> Result<String> {
     let jwt_secret = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
 
-    let expiration = Utc::now()
+    let exp = Utc::now()
         .checked_add_signed(chrono::Duration::minutes(90))
         .expect("valid timestamp")
         .timestamp();
 
-    let claims = Claims {
-        role,
-        exp: expiration as usize,
-    };
+    let claims = Claims { role, exp };
 
     let header = Header::new(Algorithm::HS512);
 
