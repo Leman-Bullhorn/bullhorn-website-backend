@@ -78,7 +78,7 @@ impl From<DieselError> for APIError {
                 Status::NotFound,
                 "Something went wrong processing this request.".into(),
             ),
-            _ => Default::default(),
+            _ => APIError::default(),
         }
     }
 }
