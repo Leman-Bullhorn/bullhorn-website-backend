@@ -47,8 +47,8 @@ impl ServerDriveFile {
 
         Ok(ServerDriveFile {
             id,
-            mime_type,
             name,
+            mime_type,
             web_view_link,
             author_name,
             author_email,
