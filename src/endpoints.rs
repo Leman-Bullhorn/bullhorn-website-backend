@@ -23,13 +23,13 @@ lazy_static::lazy_static! {
 
 #[get("/<files..>", rank = 10000)]
 pub async fn index(build_dir: &State<String>, files: PathBuf) -> Option<NamedFile> {
-    let path = Path::new(&**build_dir).join(files);
-
     async fn open_index(build_path: &str) -> Option<NamedFile> {
         NamedFile::open(Path::new(build_path).join("index.html"))
             .await
             .ok()
     }
+
+    let path = Path::new(&**build_dir).join(files);
 
     if path.is_dir() {
         open_index(&**build_dir).await
@@ -61,9 +61,10 @@ pub fn post_writers(
         }
     };
 
+    let db_connection = db_connection.lock().map_err(|_| APIError::default())?;
     let inserted_writer = diesel::insert_into(writers)
         .values(writer.into_inner())
-        .get_results::<DBWriter>(&*db_connection.lock().unwrap())?
+        .get_results::<DBWriter>(&*db_connection)?
         .swap_remove(0);
 
     let location = uri!("/api", get_writer(inserted_writer.id)).to_string();
@@ -77,8 +78,9 @@ pub fn get_writers(
 ) -> Result<Json<Vec<ServerWriter>>, APIError> {
     use crate::schema::writers::dsl::writers;
 
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
     writers
-        .load::<DBWriter>(&*db_connection.lock().unwrap())
+        .load::<DBWriter>(db_connection)
         .map(Json)
         .map_err(APIError::from)
 }
@@ -90,9 +92,10 @@ pub fn get_writer(
 ) -> Result<Json<ServerWriter>, APIError> {
     use crate::schema::writers::dsl::{id as writer_id, writers};
 
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
     writers
         .filter(writer_id.eq(id))
-        .first::<DBWriter>(&*db_connection.lock().unwrap())
+        .first::<DBWriter>(db_connection)
         .map(Json)
         .map_err(|err| match err {
             DieselError::NotFound => {
@@ -116,10 +119,11 @@ pub fn get_writer_by_name(
         )
     })?;
 
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
     writers
         .filter(first_name.eq(query_first_name))
         .filter(last_name.eq(query_last_name))
-        .first::<DBWriter>(&*db_connection.lock().unwrap())
+        .first::<DBWriter>(db_connection)
         .map(Json)
         .map_err(|err| match err {
             DieselError::NotFound => {
@@ -138,7 +142,7 @@ pub fn get_writer_id_articles(
     use crate::schema::sections::dsl::sections;
     use crate::schema::writers::dsl::{id as writer_table_id, writers};
 
-    let db_connection = &*db_connection.lock().unwrap();
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
 
     if let Err(err) = writers
         .filter(writer_table_id.eq(id))
@@ -189,7 +193,7 @@ pub fn post_articles(
         }
     };
 
-    let db_connection = &*db_connection.lock().unwrap();
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
     let writer = writers::table
         .filter(writers::id.eq(article.writer_id))
         .first::<DBWriter>(db_connection)
@@ -261,9 +265,9 @@ pub fn get_articles(
         ));
     }
 
-    let connection = &*db_connection.lock().unwrap();
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
 
-    let article_count: i64 = articles.count().get_result(connection)?;
+    let article_count: i64 = articles.count().get_result(db_connection)?;
 
     let ret_articles = articles
         .inner_join(writers)
@@ -271,7 +275,7 @@ pub fn get_articles(
         .order(publication_date.desc())
         .offset((page - 1) * limit)
         .limit(limit)
-        .load::<(DBArticle, DBWriter, DBSection)>(connection)?;
+        .load::<(DBArticle, DBWriter, DBSection)>(db_connection)?;
 
     let mut output = Vec::with_capacity(ret_articles.len());
 
@@ -293,8 +297,10 @@ pub fn delete_article(
 
     user.ok_or_else(APIError::unauthorized)?;
 
-    let deleted_count = diesel::delete(articles.filter(article_id.eq(id)))
-        .execute(&*db_connection.lock().unwrap())?;
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
+
+    let deleted_count =
+        diesel::delete(articles.filter(article_id.eq(id))).execute(db_connection)?;
 
     match deleted_count.cmp(&1) {
         Ordering::Greater => {
@@ -321,11 +327,13 @@ pub fn get_article(
     use crate::schema::sections::dsl::sections;
     use crate::schema::writers::dsl::writers;
 
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
+
     let ret_article = articles
         .filter(article_id.eq(id))
         .inner_join(writers)
         .inner_join(sections)
-        .first::<(DBArticle, DBWriter, DBSection)>(&*db_connection.lock().unwrap())
+        .first::<(DBArticle, DBWriter, DBSection)>(db_connection)
         .map_err(|err| match err {
             DieselError::NotFound => {
                 APIError::new(Status::NotFound, format!("No article with id {}.", id))
@@ -349,11 +357,13 @@ pub fn get_article_by_slug(
     use crate::schema::sections::dsl::sections;
     use crate::schema::writers::dsl::writers;
 
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
+
     let ret_article = articles
         .filter(article_slug.eq(slug))
         .inner_join(writers)
         .inner_join(sections)
-        .first::<(DBArticle, DBWriter, DBSection)>(&*db_connection.lock().unwrap())
+        .first::<(DBArticle, DBWriter, DBSection)>(db_connection)
         .map_err(|err| match err {
             DieselError::NotFound => {
                 APIError::new(Status::NotFound, format!("No article with slug {}.", slug))
@@ -374,8 +384,10 @@ pub fn get_sections(
 ) -> Result<Json<Vec<ServerSection>>, APIError> {
     use crate::schema::sections::dsl::sections;
 
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
+
     sections
-        .load::<ServerSection>(&*db_connection.lock().unwrap())
+        .load::<ServerSection>(db_connection)
         .map_err(APIError::from)
         .map(Json)
 }
@@ -387,9 +399,11 @@ pub fn get_section(
 ) -> Result<Json<ServerSection>, APIError> {
     use crate::schema::sections::dsl::{id as section_id, sections};
 
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
+
     sections
         .filter(section_id.eq(id))
-        .first::<ServerSection>(&*db_connection.lock().unwrap())
+        .first::<ServerSection>(db_connection)
         .map_err(APIError::from)
         .map(Json)
 }
@@ -401,6 +415,8 @@ pub fn post_section(
     user: Option<AdminUser>,
 ) -> Result<status::Created<Json<ServerSection>>, APIError> {
     use crate::schema::sections::dsl::sections;
+
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
 
     user.ok_or_else(APIError::unauthorized)?;
 
@@ -416,7 +432,7 @@ pub fn post_section(
 
     let inserted_section = diesel::insert_into(sections)
         .values(section.into_inner())
-        .get_results::<DBSection>(&*db_connection.lock().unwrap())?
+        .get_results::<DBSection>(db_connection)?
         .swap_remove(0);
 
     let location = uri!("/api", get_section(inserted_section.id)).to_string();
