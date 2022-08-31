@@ -1,6 +1,7 @@
 pub mod drive_v3_types;
 
 use crate::article::{ArticleContent, ArticleParagraph, ArticleSpan};
+use anyhow::anyhow;
 use async_google_apis_common as common;
 use drive::FilesService;
 use drive_v3_types as drive;
@@ -122,12 +123,12 @@ pub async fn get_files_from_folder(
     };
 
     let mut resp = files_service.list(&params).await?;
-    let mut files = std::mem::take(&mut resp.files.unwrap());
+    let mut files = std::mem::take(&mut resp.files.unwrap_or_default());
 
     while let Some(next_page_token) = &mut resp.next_page_token {
         params.page_token = Some(std::mem::take(next_page_token));
         resp = files_service.list(&params).await?;
-        files.extend_from_slice(&resp.files.unwrap());
+        files.extend_from_slice(&resp.files.unwrap_or_default());
     }
 
     Ok(files)
@@ -230,6 +231,7 @@ pub async fn get_article_content(
     files_service: &FilesService,
     file_id: impl Into<String>,
 ) -> Result<ArticleContent, common::Error> {
+    let format_error = || anyhow!("Provided file has invalid format");
     let file_id = file_id.into();
     let file_export_params = drive::FilesExportParams {
         file_id,
@@ -248,14 +250,14 @@ pub async fn get_article_content(
 
     let dom = tl::parse(&parsed_string, ParserOptions::default())?;
 
-    let mut paragraphs = dom.query_selector("p").unwrap();
+    let mut paragraphs = dom.query_selector("p").ok_or_else(format_error)?;
 
     let headline = paragraphs
         .next()
         .and_then(|p| p.get(dom.parser()))
         .and_then(|p| p.children())
         .and_then(|children| children.all(dom.parser()).get(0))
-        .unwrap()
+        .ok_or_else(format_error)?
         .inner_text(dom.parser())
         .into_owned();
 
@@ -265,15 +267,20 @@ pub async fn get_article_content(
         let paragraph = paragraph
             .get(dom.parser())
             .and_then(|p| p.as_tag())
-            .unwrap();
+            .ok_or_else(format_error)?;
         let mut styles = get_style_attributes(paragraph);
 
         let text_alignment = styles.remove("text-align").unwrap_or_else(|| "left".into());
 
         let mut article_spans = Vec::new();
-        let spans = paragraph.query_selector(dom.parser(), "span").unwrap();
+        let spans = paragraph
+            .query_selector(dom.parser(), "span")
+            .ok_or_else(format_error)?;
         for span in spans {
-            let span = span.get(dom.parser()).and_then(|s| s.as_tag()).unwrap();
+            let span = span
+                .get(dom.parser())
+                .and_then(|s| s.as_tag())
+                .ok_or_else(format_error)?;
             let mut styles = get_style_attributes(span);
 
             let text_content = span.inner_text(dom.parser()).into_owned();

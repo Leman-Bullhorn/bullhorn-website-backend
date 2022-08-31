@@ -222,7 +222,8 @@ pub fn post_articles(
 
     let inserted_article = diesel::insert_into(articles::table)
         .values((
-            articles::body.eq(serde_json::to_string(&article.content).unwrap()),
+            articles::body
+                .eq(serde_json::to_string(&article.content).map_err(|_| APIError::default())?),
             articles::headline.eq(article.content.headline.clone()),
             articles::slug.eq(slug),
             articles::writer_id.eq(article.writer_id),
