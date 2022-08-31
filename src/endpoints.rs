@@ -1,4 +1,4 @@
-use crate::article::{ClientArticle, DBArticle, ServerArticle};
+use crate::article::{ArticleContent, ClientArticle, DBArticle, ServerArticle};
 use crate::auth::{create_jwt, AdminUser, LoginInfo, Role, COOKIE_SESSION_TOKEN};
 use crate::error::{APIError, APIResult};
 use crate::gdrive::drive_v3_types::FilesService;
@@ -162,12 +162,11 @@ pub fn get_writer_id_articles(
         .load::<(DBArticle, DBWriter, DBSection)>(db_connection)
         .map_err(APIError::from)?;
 
-    Ok(Json(
-        ret_articles
-            .into_iter()
-            .map(|(article, writer, section)| ServerArticle::new(article, writer, section))
-            .collect::<Vec<ServerArticle>>(),
-    ))
+    let mut output = Vec::new();
+    for (article, writer, section) in ret_articles {
+        output.push(ServerArticle::new(article, writer, section)?);
+    }
+    Ok(Json(output))
 }
 
 #[post("/articles", data = "<article>")]
@@ -213,15 +212,15 @@ pub fn post_articles(
             _ => APIError::from(err),
         })?;
 
-    let mut slug = article.headline.replace(' ', "-");
+    let mut slug = article.content.headline.replace(' ', "-");
     slug.make_ascii_lowercase();
     let slug = SLUG_REGEX.replace_all(&slug, "");
 
     let inserted_article = diesel::insert_into(articles::table)
         .values((
-            articles::headline.eq(article.headline),
+            articles::body.eq(serde_json::to_string(&article.content).unwrap()),
+            articles::headline.eq(article.content.headline.clone()),
             articles::slug.eq(slug),
-            articles::body.eq(&article.body),
             articles::writer_id.eq(article.writer_id),
             articles::section_id.eq(article.section_id),
             articles::publication_date.eq(Utc::now().naive_utc()),
@@ -231,7 +230,13 @@ pub fn post_articles(
         .get_results::<DBArticle>(db_connection)?
         .swap_remove(0);
 
-    let ret_article = ServerArticle::new(inserted_article, writer, section);
+    let ret_article = ServerArticle::with_content(
+        inserted_article,
+        article.into_inner().content,
+        writer,
+        section,
+    );
+
     let location = uri!("/api", get_article(ret_article.id)).to_string();
 
     Ok(status::Created::new(location).body(Json(ret_article)))
@@ -271,7 +276,7 @@ pub fn get_articles(
     let mut output = Vec::with_capacity(ret_articles.len());
 
     for (article, writer, section) in ret_articles {
-        output.push(ServerArticle::new(article, writer, section));
+        output.push(ServerArticle::new(article, writer, section)?);
     }
 
     Ok(Paginated::new(output, limit, page, article_count))
@@ -332,7 +337,7 @@ pub fn get_article(
         ret_article.0,
         ret_article.1,
         ret_article.2,
-    )))
+    )?))
 }
 
 #[get("/articles/<slug>", rank = 3)]
@@ -360,7 +365,7 @@ pub fn get_article_by_slug(
         ret_article.0,
         ret_article.1,
         ret_article.2,
-    )))
+    )?))
 }
 
 #[get("/sections")]
@@ -538,6 +543,20 @@ pub async fn move_final_to_draft(
         .await
         .map_err(Into::into)
         .map(Json)
+}
+
+#[get("/drive/content/<file_id>")]
+pub async fn get_file_content(
+    files_service: &State<FilesService>,
+    file_id: &str,
+    user: Option<AdminUser>,
+) -> APIResult<Json<ArticleContent>> {
+    user.ok_or_else(APIError::unauthorized)?;
+
+    gdrive::get_article_content(files_service, file_id)
+        .await
+        .map(Json)
+        .map_err(|_| APIError::default())
 }
 
 #[get("/<_..>", rank = 9999)]

@@ -1,12 +1,13 @@
 pub mod drive_v3_types;
 
-use serde::{Deserialize, Serialize};
-use std::path::Path;
-
+use crate::article::{ArticleContent, ArticleParagraph, ArticleSpan};
 use async_google_apis_common as common;
-use drive_v3_types as drive;
-
 use drive::FilesService;
+use drive_v3_types as drive;
+use serde::{Deserialize, Serialize};
+use std::collections::HashMap;
+use std::path::Path;
+use tl::ParserOptions;
 
 pub const DRAFTS_FOLDER_ID: &str = "1BELyMOBd1Orod-Iwn0_Jf7ZHOEydsJb7";
 pub const FINALS_FOLDER_ID: &str = "1gDcjDPnt9SU8uM0kAS_H6Ubx0QubjVdw";
@@ -193,4 +194,121 @@ pub async fn move_file_to_draft(
     file_id: impl Into<String>,
 ) -> Result<ServerDriveFile, common::Error> {
     ServerDriveFile::new(move_file(files_service, file_id, DRAFTS_FOLDER_ID).await?)
+}
+
+fn get_style_attributes(tag: &tl::HTMLTag) -> HashMap<String, String> {
+    let mut map = HashMap::new();
+
+    let styles = tag.attributes().get("style");
+
+    let styles = if let Some(styles) = styles {
+        styles
+    } else {
+        return map;
+    };
+    let styles = if let Some(styles) = styles {
+        styles
+    } else {
+        return map;
+    };
+
+    for style in styles.as_bytes().split(|b| *b == b';') {
+        let mut split = style.split(|b| *b == b':');
+
+        match (split.next(), split.next()) {
+            (Some(key), Some(value)) => map.insert(
+                String::from_utf8_lossy(key).into_owned(),
+                String::from_utf8_lossy(value).into_owned(),
+            ),
+            (_, _) => continue,
+        };
+    }
+    map
+}
+
+pub async fn get_article_content(
+    files_service: &FilesService,
+    file_id: impl Into<String>,
+) -> Result<ArticleContent, common::Error> {
+    let file_id = file_id.into();
+    let file_export_params = drive::FilesExportParams {
+        file_id,
+        mime_type: "text/html".into(),
+        ..Default::default()
+    };
+
+    let mut download = files_service.export(&file_export_params).await?;
+
+    let mut html_bytes = Vec::with_capacity(1024);
+    if let common::DownloadResult::Response(_) = download.do_it_to_buf(&mut html_bytes).await? {
+        return Err(common::Error::msg("Not good"));
+    }
+
+    let parsed_string = String::from_utf8(html_bytes)?;
+
+    let dom = tl::parse(&parsed_string, ParserOptions::default())?;
+
+    let mut paragraphs = dom.query_selector("p").unwrap();
+
+    let headline = paragraphs
+        .next()
+        .and_then(|p| p.get(dom.parser()))
+        .and_then(|p| p.children())
+        .and_then(|children| children.all(dom.parser()).get(0))
+        .unwrap()
+        .inner_text(dom.parser())
+        .into_owned();
+
+    let mut article_paragraphs = Vec::new();
+
+    for paragraph in paragraphs {
+        let paragraph = paragraph
+            .get(dom.parser())
+            .and_then(|p| p.as_tag())
+            .unwrap();
+        let mut styles = get_style_attributes(paragraph);
+
+        let text_alignment = styles.remove("text-align").unwrap_or_else(|| "left".into());
+
+        let mut article_spans = Vec::new();
+        let spans = paragraph.query_selector(dom.parser(), "span").unwrap();
+        for span in spans {
+            let span = span.get(dom.parser()).and_then(|s| s.as_tag()).unwrap();
+            let mut styles = get_style_attributes(span);
+
+            let text_content = span.inner_text(dom.parser()).into_owned();
+
+            let font_style = styles
+                .remove("font-style")
+                .unwrap_or_else(|| "normal".into());
+            let text_decoration = styles
+                .remove("text-decoration")
+                .unwrap_or_else(|| "none".into());
+            let color = styles.remove("color").unwrap_or_else(|| "#000000".into());
+            let font_weight = styles.remove("font-weight").unwrap_or_else(|| "400".into());
+
+            let article_span = ArticleSpan {
+                text_content,
+                font_style,
+                text_decoration,
+                color,
+                font_weight,
+            };
+
+            article_spans.push(article_span);
+        }
+
+        let article_paragraph = ArticleParagraph {
+            text_alignment,
+            spans: article_spans,
+        };
+        article_paragraphs.push(article_paragraph);
+    }
+
+    let article_content = ArticleContent {
+        headline,
+        paragraphs: article_paragraphs,
+    };
+
+    Ok(article_content)
 }

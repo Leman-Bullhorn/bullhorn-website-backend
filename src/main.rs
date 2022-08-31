@@ -51,6 +51,7 @@ async fn rocket() -> _ {
                 endpoints::get_drive_finals,
                 endpoints::move_draft_to_final,
                 endpoints::move_final_to_draft,
+                endpoints::get_file_content,
             ],
         )
         .manage(db_connection)

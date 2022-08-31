@@ -16,6 +16,8 @@ jsonwebtoken = { version = "8", default-features = false }
 async-google-apis-common = "0.3"
 hyper-rustls = { version = "0.22", features = ["rustls-native-certs"] }
 anyhow = "1.0.62"
+tl = "0.7.7"
+serde_json = "1.0.85"
 
 [dependencies.regex]
 version = "1.5"
