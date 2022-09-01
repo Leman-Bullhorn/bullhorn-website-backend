@@ -17,8 +17,16 @@ pub struct ArticleParagraph {
 }
 
 #[derive(Serialize, Deserialize, Debug)]
+#[allow(non_camel_case_types)]
+//TODO: remove client-side conversion to camelCase and instead use serde options
+pub enum SpanContent {
+    text { content: String },
+    anchor { href: String, content: String },
+}
+
+#[derive(Serialize, Deserialize, Debug)]
 pub struct ArticleSpan {
-    pub text_content: String,
+    pub content: Vec<SpanContent>,
     pub font_style: String,
     pub text_decoration: String,
     pub color: String,

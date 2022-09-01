@@ -1,6 +1,6 @@
 pub mod drive_v3_types;
 
-use crate::article::{ArticleContent, ArticleParagraph, ArticleSpan};
+use crate::article::{ArticleContent, ArticleParagraph, ArticleSpan, SpanContent};
 use anyhow::anyhow;
 use async_google_apis_common as common;
 use drive::FilesService;
@@ -283,7 +283,29 @@ pub async fn get_article_content(
                 .ok_or_else(format_error)?;
             let mut styles = get_style_attributes(span);
 
-            let text_content = span.inner_text(dom.parser()).into_owned();
+            let mut content = Vec::new();
+            for thing in span.children().top().iter() {
+                let node = thing.get(dom.parser()).ok_or_else(format_error)?;
+                if let tl::Node::Tag(tag) = node {
+                    if tag.name() == "a" {
+                        let href = tag.attributes().get("href").and_then(|it| it);
+                        let href = if let Some(href) = href {
+                            href
+                        } else {
+                            continue;
+                        };
+
+                        content.push(SpanContent::anchor {
+                            href: href.as_utf8_str().into_owned(),
+                            content: tag.inner_text(dom.parser()).into_owned(),
+                        });
+                    }
+                } else if let tl::Node::Raw(text) = node {
+                    content.push(SpanContent::text {
+                        content: text.as_utf8_str().into_owned(),
+                    });
+                }
+            }
 
             let font_style = styles
                 .remove("font-style")
@@ -295,7 +317,7 @@ pub async fn get_article_content(
             let font_weight = styles.remove("font-weight").unwrap_or_else(|| "400".into());
 
             let article_span = ArticleSpan {
-                text_content,
+                content,
                 font_style,
                 text_decoration,
                 color,
