@@ -60,7 +60,7 @@ async fn rocket() -> _ {
 }
 
 fn establish_connection() -> PgConnection {
-    let _ = dotenv::dotenv();
+    _ = dotenvy::dotenv();
 
     let db_url = env::var("DATABASE_URL").expect("DATABASE_URL must be set");
     PgConnection::establish(&db_url).unwrap_or_else(|_| panic!("error connecting to {}", db_url))
