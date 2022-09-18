@@ -12,6 +12,7 @@ mod section;
 mod writer;
 
 use diesel::prelude::*;
+use rocket::fs::FileServer;
 use rocket::{launch, routes};
 use std::env;
 use std::sync::Mutex;
@@ -23,6 +24,9 @@ async fn rocket() -> _ {
 
     let client_secret_path = env::var("CLIENT_SECRET_PATH")
         .expect("environment variable 'CLIENT_SECRET_PATH' should be set");
+
+    let images_dir = env::var("ARTICLE_IMAGE_PATH")
+        .expect("environment variable 'ARTICLE_IMAGE_PATH' should be set");
 
     let file_service = gdrive::make_files_service(client_secret_path).await;
 
@@ -54,6 +58,8 @@ async fn rocket() -> _ {
                 endpoints::get_file_content,
             ],
         )
+        .mount("/image", routes![endpoints::image_fallback])
+        .mount("/image", FileServer::from(images_dir))
         .manage(db_connection)
         .manage(build_dir)
         .manage(file_service)

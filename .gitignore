@@ -2,5 +2,6 @@
 .env
 .DS_STORE
 /build
+/images
 tokencache.json
 client_secret.json

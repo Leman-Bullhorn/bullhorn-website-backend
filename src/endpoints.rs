@@ -576,7 +576,13 @@ pub async fn get_file_content(
         .map_err(|_| APIError::default())
 }
 
+// TODO: This isn't really an API so this probably isn't the best 404 response
 #[get("/<_..>", rank = 9999)]
-pub fn fallback() -> APIError {
+pub fn image_fallback() -> APIError {
+    APIError::new(Status::NotFound, "Unable to locate resource".into())
+}
+
+#[get("/<_..>", rank = 9999)]
+pub fn api_fallback() -> APIError {
     APIError::new(Status::NotFound, "Invalid endpoint.".into())
 }

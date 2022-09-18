@@ -3,12 +3,17 @@ pub mod drive_v3_types;
 use crate::article::{ArticleContent, ArticleParagraph, ArticleSpan, SpanContent};
 use anyhow::anyhow;
 use async_google_apis_common as common;
+use chrono::Datelike;
 use drive::FilesService;
 use drive_v3_types as drive;
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
-use std::path::Path;
+use std::fs;
+use std::io::{Read as _, Write};
+use std::path::{Path, PathBuf};
 use tl::ParserOptions;
+use uuid::Uuid;
+use zip::result::ZipResult;
 
 pub const DRAFTS_FOLDER_ID: &str = "1BELyMOBd1Orod-Iwn0_Jf7ZHOEydsJb7";
 pub const FINALS_FOLDER_ID: &str = "1gDcjDPnt9SU8uM0kAS_H6Ubx0QubjVdw";
@@ -218,13 +223,129 @@ fn get_style_attributes(tag: &tl::HTMLTag) -> HashMap<String, String> {
 
         match (split.next(), split.next()) {
             (Some(key), Some(value)) => map.insert(
-                String::from_utf8_lossy(key).into_owned(),
-                String::from_utf8_lossy(value).into_owned(),
+                String::from_utf8_lossy(key).trim().into(),
+                String::from_utf8_lossy(value).trim().into(),
             ),
             (_, _) => continue,
         };
     }
     map
+}
+
+type ImagePathParts = (i32, u32, String, String);
+fn unzip_and_store(zipped_bytes: &[u8]) -> ZipResult<(String, HashMap<String, ImagePathParts>)> {
+    let reader = std::io::Cursor::new(zipped_bytes);
+    let mut zip = zip::ZipArchive::new(reader)?;
+
+    let mut html_string = String::new();
+    let mut file_map = HashMap::new();
+
+    for i in 0..zip.len() {
+        let mut zip_file = zip.by_index(i)?;
+        let file_name = zip_file.name();
+        if file_name.starts_with("images/") {
+            let mut zip_file_bytes = Vec::with_capacity(zip_file.size() as usize);
+            zip_file.read_to_end(&mut zip_file_bytes)?;
+
+            let image_dir = std::env::var("ARTICLE_IMAGE_PATH")
+                .expect("environment variable ARTICLE_IMAGE_PATH should be set");
+
+            let extension = std::path::Path::new(zip_file.name())
+                .extension()
+                .unwrap_or_else(|| "png".as_ref());
+
+            // Using v3 uuid means that there will be no duplicate images stored
+            let file_name = Uuid::new_v3(&Uuid::NAMESPACE_URL, &zip_file_bytes).to_string();
+
+            let utc_now = chrono::Utc::now();
+            let (year, month) = (utc_now.year(), utc_now.month());
+
+            // image path: images/<year>/<month>/<name>.<extension>
+            let mut path = PathBuf::from(image_dir);
+            path.push(year.to_string());
+            path.push(month.to_string());
+            path.push(file_name.clone());
+            path.set_extension(extension);
+
+            // Create the image directory if it doesn't exist.
+            if let Some(parent) = path.parent() {
+                fs::create_dir_all(parent).unwrap();
+            }
+
+            let mut dest_file = fs::File::create(&path).unwrap();
+
+            dest_file.write_all(zip_file_bytes.as_slice()).unwrap();
+            file_map.insert(
+                zip_file.name().to_owned(),
+                (
+                    year,
+                    month,
+                    file_name,
+                    extension.to_string_lossy().into_owned(),
+                ),
+            );
+        } else if file_name.ends_with(".html") {
+            html_string.reserve(zip_file.size() as usize);
+            zip_file.read_to_string(&mut html_string).unwrap();
+        }
+    }
+
+    Ok((html_string, file_map))
+}
+
+fn make_a_span(tag: &mut tl::HTMLTag, dom: &tl::VDom) -> SpanContent {
+    let href = tag
+        .attributes_mut()
+        .remove("href")
+        .and_then(|it| it)
+        .unwrap_or_else(tl::Bytes::new)
+        .as_utf8_str()
+        .into_owned();
+
+    SpanContent::anchor {
+        href,
+        content: tag.inner_text(dom.parser()).into_owned(),
+    }
+}
+
+fn make_image_span(
+    tag: &mut tl::HTMLTag,
+    image_map: &HashMap<String, ImagePathParts>,
+) -> SpanContent {
+    let src = tag
+        .attributes_mut()
+        .remove("src")
+        .and_then(|it| it)
+        .unwrap_or_else(tl::Bytes::new)
+        .as_utf8_str()
+        .into_owned();
+    let server_src = image_map.get(&src);
+
+    let src = if let Some((year, month, name, extension)) = server_src {
+        format!("/image/{year}/{month}/{name}.{extension}")
+    } else {
+        src
+    };
+
+    let alt = tag
+        .attributes_mut()
+        .remove("alt")
+        .and_then(|it| it)
+        .unwrap_or_else(tl::Bytes::new)
+        .as_utf8_str()
+        .into_owned();
+
+    let mut styles = get_style_attributes(tag);
+
+    let width = styles.remove("width").unwrap_or_default();
+    let height = styles.remove("height").unwrap_or_default();
+
+    SpanContent::image {
+        src,
+        alt,
+        width,
+        height,
+    }
 }
 
 pub async fn get_article_content(
@@ -235,18 +356,18 @@ pub async fn get_article_content(
     let file_id = file_id.into();
     let file_export_params = drive::FilesExportParams {
         file_id,
-        mime_type: "text/html".into(),
+        mime_type: "application/zip".into(),
         ..Default::default()
     };
 
     let mut download = files_service.export(&file_export_params).await?;
 
-    let mut html_bytes = Vec::with_capacity(1024);
+    let mut html_bytes = Vec::with_capacity(1024); // 1KB - completely arbitrary
     if let common::DownloadResult::Response(_) = download.do_it_to_buf(&mut html_bytes).await? {
         return Err(common::Error::msg("Not good"));
     }
 
-    let parsed_string = String::from_utf8(html_bytes)?;
+    let (parsed_string, image_map) = unzip_and_store(&html_bytes)?;
 
     let dom = tl::parse(&parsed_string, ParserOptions::default())?;
 
@@ -284,26 +405,23 @@ pub async fn get_article_content(
             let mut styles = get_style_attributes(span);
 
             let mut content = Vec::new();
-            for thing in span.children().top().iter() {
-                let node = thing.get(dom.parser()).ok_or_else(format_error)?;
-                if let tl::Node::Tag(tag) = node {
-                    if tag.name() == "a" {
-                        let href = tag.attributes().get("href").and_then(|it| it);
-                        let href = if let Some(href) = href {
-                            href
-                        } else {
-                            continue;
-                        };
-
-                        content.push(SpanContent::anchor {
-                            href: href.as_utf8_str().into_owned(),
-                            content: tag.inner_text(dom.parser()).into_owned(),
+            for child in span.children().top().iter() {
+                let mut node = child.get(dom.parser()).ok_or_else(format_error)?.clone();
+                match &mut node {
+                    tl::Node::Tag(tag) if tag.name() == "a" => {
+                        let a = make_a_span(tag, &dom);
+                        content.push(a);
+                    }
+                    tl::Node::Tag(tag) if tag.name() == "img" => {
+                        let image = make_image_span(tag, &image_map);
+                        content.push(image);
+                    }
+                    tl::Node::Raw(text) => {
+                        content.push(SpanContent::text {
+                            content: text.as_utf8_str().into_owned(),
                         });
                     }
-                } else if let tl::Node::Raw(text) = node {
-                    content.push(SpanContent::text {
-                        content: text.as_utf8_str().into_owned(),
-                    });
+                    _ => {}
                 }
             }
 

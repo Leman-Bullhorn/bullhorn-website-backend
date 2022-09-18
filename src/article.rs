@@ -20,8 +20,19 @@ pub struct ArticleParagraph {
 #[allow(non_camel_case_types)]
 //TODO: remove client-side conversion to camelCase and instead use serde options
 pub enum SpanContent {
-    text { content: String },
-    anchor { href: String, content: String },
+    text {
+        content: String,
+    },
+    anchor {
+        href: String,
+        content: String,
+    },
+    image {
+        src: String,
+        width: String,
+        height: String,
+        alt: String,
+    },
 }
 
 #[derive(Serialize, Deserialize, Debug)]
