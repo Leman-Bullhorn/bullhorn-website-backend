@@ -13,7 +13,8 @@ use rocket::fs::NamedFile;
 use rocket::http::{Cookie, CookieJar, SameSite, Status};
 use rocket::response::status;
 use rocket::serde::json::Json;
-use rocket::{delete, get, post, uri, State};
+use rocket::{delete, get, patch, post, uri, State};
+use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
 
@@ -52,7 +53,7 @@ pub fn post_writers(
     user.ok_or_else(APIError::unauthorized)?;
 
     let writer = match writer {
-        Some(article) => article,
+        Some(writer) => writer,
         None => {
             return Err(APIError::new(
                 Status::BadRequest,
@@ -70,6 +71,52 @@ pub fn post_writers(
     let location = uri!("/api", get_writer(inserted_writer.id)).to_string();
 
     Ok(status::Created::new(location).body(Json(inserted_writer)))
+}
+
+#[patch("/writers/<id>", data = "<new_writer>")]
+pub fn patch_writer_by_id(
+    db_connection: &State<Mutex<PgConnection>>,
+    new_writer: Option<Json<HashMap<&str, &str>>>,
+    id: i32,
+    user: Option<AdminUser>,
+) -> Result<(), APIError> {
+    use crate::schema::writers;
+
+    user.ok_or_else(APIError::unauthorized)?;
+
+    let mut new_writer = match new_writer {
+        Some(writer) if writer.contains_key("bio") || writer.contains_key("title") => writer,
+        _ => {
+            return Err(APIError::new(
+                Status::BadRequest,
+                "Invalid writer format.".into(),
+            ))
+        }
+    };
+
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
+
+    #[derive(AsChangeset)]
+    #[table_name = "writers"]
+    struct PatchWriter<'a> {
+        bio: Option<&'a str>,
+        title: Option<&'a str>,
+    }
+
+    diesel::update(writers::table.find(id))
+        .set(PatchWriter {
+            bio: new_writer.remove("bio"),
+            title: new_writer.remove("title"),
+        })
+        .execute(db_connection)
+        .map_err(|err| match err {
+            DieselError::NotFound => {
+                APIError::new(Status::NotFound, format!("No writer with {id}."))
+            }
+            _ => APIError::from(err),
+        })?;
+
+    Ok(())
 }
 
 #[get("/writers")]
@@ -99,7 +146,7 @@ pub fn get_writer(
         .map(Json)
         .map_err(|err| match err {
             DieselError::NotFound => {
-                APIError::new(Status::NotFound, format!("No writer with id {}.", id))
+                APIError::new(Status::NotFound, format!("No writer with id {id}."))
             }
             _ => APIError::from(err),
         })
