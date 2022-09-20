@@ -85,7 +85,7 @@ pub fn patch_writer_by_id(
     user.ok_or_else(APIError::unauthorized)?;
 
     let mut new_writer = match new_writer {
-        Some(writer) if writer.contains_key("bio") || writer.contains_key("title") => writer,
+        Some(writer) => writer,
         _ => {
             return Err(APIError::new(
                 Status::BadRequest,
@@ -99,14 +99,23 @@ pub fn patch_writer_by_id(
     #[derive(AsChangeset)]
     #[table_name = "writers"]
     struct PatchWriter<'a> {
+        first_name: Option<&'a str>,
+        last_name: Option<&'a str>,
         bio: Option<&'a str>,
         title: Option<&'a str>,
     }
 
+    let first_name = new_writer.remove("first_name");
+    let last_name = new_writer.remove("last_name");
+    let bio = new_writer.remove("bio");
+    let title = new_writer.remove("title");
+
     diesel::update(writers::table.find(id))
         .set(PatchWriter {
-            bio: new_writer.remove("bio"),
-            title: new_writer.remove("title"),
+            first_name,
+            last_name,
+            bio,
+            title,
         })
         .execute(db_connection)
         .map_err(|err| match err {
