@@ -73,6 +73,7 @@ pub fn post_writers(
     Ok(status::Created::new(location).body(Json(inserted_writer)))
 }
 
+#[allow(clippy::extra_unused_lifetimes)]
 #[patch("/writers/<id>", data = "<new_writer>")]
 pub fn patch_writer_by_id(
     db_connection: &State<Mutex<PgConnection>>,
