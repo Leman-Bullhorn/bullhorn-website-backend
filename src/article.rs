@@ -1,3 +1,4 @@
+use crate::auth::AdminUser;
 use crate::error::{APIError, APIResult};
 use crate::writer::DBWriter;
 use crate::{schema::articles, section::DBSection};
@@ -57,6 +58,7 @@ pub struct DBArticle {
     pub publication_date: DateTime<Utc>,
     pub preview: Option<String>,
     pub image_url: Option<String>,
+    pub drive_link: Option<String>,
 }
 
 /// What the client receives when they request an article.
@@ -71,10 +73,16 @@ pub struct ServerArticle {
     pub publication_date: DateTime<Utc>,
     pub preview: String,
     pub image_url: String,
+    pub drive_link: Option<String>,
 }
 
 impl ServerArticle {
-    pub fn new(article: DBArticle, writer: DBWriter, section: DBSection) -> APIResult<Self> {
+    pub fn new(
+        article: DBArticle,
+        writer: DBWriter,
+        section: DBSection,
+        user: Option<AdminUser>,
+    ) -> APIResult<Self> {
         let content = serde_json::from_str(&article.body).map_err(|_| APIError::default())?;
         Ok(ServerArticle {
             id: article.id,
@@ -86,6 +94,7 @@ impl ServerArticle {
             publication_date: article.publication_date,
             preview: article.preview.unwrap_or_default(),
             image_url: article.image_url.unwrap_or_default(),
+            drive_link: user.and(article.drive_link),
         })
     }
 
@@ -94,6 +103,7 @@ impl ServerArticle {
         content: ArticleContent,
         writer: DBWriter,
         section: DBSection,
+        user: Option<AdminUser>,
     ) -> Self {
         ServerArticle {
             id: article.id,
@@ -105,6 +115,7 @@ impl ServerArticle {
             publication_date: article.publication_date,
             preview: article.preview.unwrap_or_default(),
             image_url: article.image_url.unwrap_or_default(),
+            drive_link: user.and(article.drive_link),
         }
     }
 }
@@ -117,4 +128,5 @@ pub struct ClientArticle<'a> {
     pub section_id: i32,
     pub preview: Option<&'a str>,
     pub image_url: Option<&'a str>,
+    pub drive_link: Option<&'a str>,
 }

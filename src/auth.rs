@@ -7,6 +7,7 @@ use serde::{Deserialize, Serialize};
 
 pub const COOKIE_SESSION_TOKEN: &str = "session_token";
 
+#[derive(Clone, Copy)]
 pub struct AdminUser;
 
 #[rocket::async_trait]

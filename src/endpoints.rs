@@ -194,6 +194,7 @@ pub fn get_writer_by_name(
 pub fn get_writer_id_articles(
     db_connection: &State<Mutex<PgConnection>>,
     id: i32,
+    user: Option<AdminUser>,
 ) -> Result<Json<Vec<ServerArticle>>, APIError> {
     use crate::schema::articles::dsl::{articles, writer_id};
     use crate::schema::sections::dsl::sections;
@@ -209,7 +210,7 @@ pub fn get_writer_id_articles(
             DieselError::NotFound => {
                 return Err(APIError::new(
                     Status::NotFound,
-                    format!("No writer with id {} found.", id),
+                    format!("No writer with id {id} found."),
                 ))
             }
             _ => return Err(APIError::from(err)),
@@ -225,7 +226,7 @@ pub fn get_writer_id_articles(
 
     let mut output = Vec::new();
     for (article, writer, section) in ret_articles {
-        output.push(ServerArticle::new(article, writer, section)?);
+        output.push(ServerArticle::new(article, writer, section, user)?);
     }
     Ok(Json(output))
 }
@@ -233,7 +234,7 @@ pub fn get_writer_id_articles(
 #[post("/articles", data = "<article>")]
 pub fn post_articles(
     db_connection: &State<Mutex<PgConnection>>,
-    article: Option<Json<ClientArticle<'_>>>,
+    article: Option<Json<ClientArticle>>,
     user: Option<AdminUser>,
 ) -> Result<status::Created<Json<ServerArticle>>, APIError> {
     use crate::schema::*;
@@ -288,6 +289,7 @@ pub fn post_articles(
             articles::publication_date.eq(Utc::now().naive_utc()),
             articles::preview.eq(article.preview),
             articles::image_url.eq(article.image_url),
+            articles::drive_link.eq(article.drive_link),
         ))
         .get_results::<DBArticle>(db_connection)?
         .swap_remove(0);
@@ -297,6 +299,7 @@ pub fn post_articles(
         article.into_inner().content,
         writer,
         section,
+        user,
     );
 
     let location = uri!("/api", get_article(ret_article.id)).to_string();
@@ -309,6 +312,7 @@ pub fn get_articles(
     db_connection: &State<Mutex<PgConnection>>,
     limit: Option<i64>,
     page: Option<i64>,
+    user: Option<AdminUser>,
 ) -> Result<Paginated<Vec<ServerArticle>>, APIError> {
     use crate::schema::articles::dsl::{articles, publication_date};
     use crate::schema::sections::dsl::sections;
@@ -338,7 +342,7 @@ pub fn get_articles(
     let mut output = Vec::with_capacity(ret_articles.len());
 
     for (article, writer, section) in ret_articles {
-        output.push(ServerArticle::new(article, writer, section)?);
+        output.push(ServerArticle::new(article, writer, section, user)?);
     }
 
     Ok(Paginated::new(output, limit, page, article_count))
@@ -380,6 +384,7 @@ pub fn delete_article(
 pub fn get_article(
     db_connection: &State<Mutex<PgConnection>>,
     id: i32,
+    user: Option<AdminUser>,
 ) -> Result<Json<ServerArticle>, APIError> {
     use crate::schema::articles::dsl::{articles, id as article_id};
     use crate::schema::sections::dsl::sections;
@@ -403,6 +408,7 @@ pub fn get_article(
         ret_article.0,
         ret_article.1,
         ret_article.2,
+        user,
     )?))
 }
 
@@ -410,6 +416,7 @@ pub fn get_article(
 pub fn get_article_by_slug(
     db_connection: &State<Mutex<PgConnection>>,
     slug: &str,
+    user: Option<AdminUser>,
 ) -> Result<Json<ServerArticle>, APIError> {
     use crate::schema::articles::dsl::{articles, slug as article_slug};
     use crate::schema::sections::dsl::sections;
@@ -433,6 +440,7 @@ pub fn get_article_by_slug(
         ret_article.0,
         ret_article.1,
         ret_article.2,
+        user,
     )?))
 }
 

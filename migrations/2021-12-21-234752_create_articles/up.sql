@@ -1,3 +1,5 @@
+-- CREATE TYPE Section AS ENUM ('news', 'opinions', 'humor', 'features', 'science', 'sports', 'arts');
+
 CREATE TABLE articles (
   id SERIAL PRIMARY KEY,
   headline VARCHAR NOT NULL,
@@ -5,9 +7,11 @@ CREATE TABLE articles (
   body TEXT NOT NULL,
   writer_id int NOT NULL,
   section_id int NOT NULL,
+  -- section Section NOT NULL,
   publication_date TIMESTAMP WITH TIME ZONE NOT NULL,
   preview TEXT,
   image_url TEXT,
+  drive_link TEXT,
   CONSTRAINT fk_writer
     FOREIGN KEY(writer_id)
       REFERENCES writers(id)
