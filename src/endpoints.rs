@@ -14,6 +14,7 @@ use rocket::http::{Cookie, CookieJar, SameSite, Status};
 use rocket::response::status;
 use rocket::serde::json::Json;
 use rocket::{delete, get, patch, post, uri, State};
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::Mutex;
@@ -289,7 +290,7 @@ pub fn post_articles(
             articles::publication_date.eq(Utc::now().naive_utc()),
             articles::preview.eq(article.preview),
             articles::image_url.eq(article.image_url),
-            articles::drive_link.eq(article.drive_link),
+            articles::drive_file_id.eq(article.drive_file_id),
         ))
         .get_results::<DBArticle>(db_connection)?
         .swap_remove(0);
@@ -305,6 +306,50 @@ pub fn post_articles(
     let location = uri!("/api", get_article(ret_article.id)).to_string();
 
     Ok(status::Created::new(location).body(Json(ret_article)))
+}
+
+use crate::schema::articles;
+#[derive(AsChangeset, Serialize, Deserialize)]
+#[table_name = "articles"]
+pub struct PatchArticle {
+    writer_id: Option<i32>,
+    section_id: Option<i32>,
+}
+
+#[allow(clippy::extra_unused_lifetimes)]
+#[patch("/articles/<id>", data = "<new_article>")]
+pub fn patch_article_by_id(
+    db_connection: &State<Mutex<PgConnection>>,
+    new_article: Option<Json<PatchArticle>>,
+    id: i32,
+    user: Option<AdminUser>,
+) -> APIResult<()> {
+    use crate::schema::articles;
+    user.ok_or_else(APIError::unauthorized)?;
+
+    let new_article = match new_article {
+        Some(article) => article,
+        _ => {
+            return Err(APIError::new(
+                Status::BadRequest,
+                "Invalid article format.".into(),
+            ))
+        }
+    };
+
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
+
+    diesel::update(articles::table.find(id))
+        .set(new_article.0)
+        .execute(db_connection)
+        .map_err(|err| match err {
+            DieselError::NotFound => {
+                APIError::new(Status::NotFound, format!("No article with {id}."))
+            }
+            _ => APIError::from(err),
+        })?;
+
+    Ok(())
 }
 
 #[get("/articles?<limit>&<page>", rank = 2)]

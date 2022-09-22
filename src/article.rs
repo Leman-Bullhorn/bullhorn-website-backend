@@ -58,7 +58,7 @@ pub struct DBArticle {
     pub publication_date: DateTime<Utc>,
     pub preview: Option<String>,
     pub image_url: Option<String>,
-    pub drive_link: Option<String>,
+    pub drive_file_id: Option<String>,
 }
 
 /// What the client receives when they request an article.
@@ -73,7 +73,7 @@ pub struct ServerArticle {
     pub publication_date: DateTime<Utc>,
     pub preview: String,
     pub image_url: String,
-    pub drive_link: Option<String>,
+    pub drive_file_id: Option<String>,
 }
 
 impl ServerArticle {
@@ -94,7 +94,7 @@ impl ServerArticle {
             publication_date: article.publication_date,
             preview: article.preview.unwrap_or_default(),
             image_url: article.image_url.unwrap_or_default(),
-            drive_link: user.and(article.drive_link),
+            drive_file_id: user.and(article.drive_file_id),
         })
     }
 
@@ -115,7 +115,7 @@ impl ServerArticle {
             publication_date: article.publication_date,
             preview: article.preview.unwrap_or_default(),
             image_url: article.image_url.unwrap_or_default(),
-            drive_link: user.and(article.drive_link),
+            drive_file_id: user.and(article.drive_file_id),
         }
     }
 }
@@ -128,5 +128,5 @@ pub struct ClientArticle<'a> {
     pub section_id: i32,
     pub preview: Option<&'a str>,
     pub image_url: Option<&'a str>,
-    pub drive_link: Option<&'a str>,
+    pub drive_file_id: Option<&'a str>,
 }

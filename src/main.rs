@@ -38,6 +38,7 @@ async fn rocket() -> _ {
                 endpoints::get_articles,
                 endpoints::get_article,
                 endpoints::post_articles,
+                endpoints::patch_article_by_id,
                 endpoints::get_writer,
                 endpoints::post_writers,
                 endpoints::patch_writer_by_id,

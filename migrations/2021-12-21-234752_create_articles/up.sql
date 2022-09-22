@@ -11,7 +11,7 @@ CREATE TABLE articles (
   publication_date TIMESTAMP WITH TIME ZONE NOT NULL,
   preview TEXT,
   image_url TEXT,
-  drive_link TEXT,
+  drive_file_id TEXT,
   CONSTRAINT fk_writer
     FOREIGN KEY(writer_id)
       REFERENCES writers(id)

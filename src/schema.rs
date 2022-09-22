@@ -11,7 +11,7 @@ diesel::table! {
         publication_date -> Timestamptz,
         preview -> Nullable<Text>,
         image_url -> Nullable<Text>,
-        drive_link -> Nullable<Text>,
+        drive_file_id -> Nullable<Text>,
     }
 }
 
