@@ -1,4 +1,4 @@
--- CREATE TYPE Section AS ENUM ('news', 'opinions', 'humor', 'features', 'science', 'sports', 'arts');
+CREATE TYPE Section AS ENUM ('news', 'opinions', 'humor', 'features', 'science', 'sports', 'arts');
 
 CREATE TABLE articles (
   id SERIAL PRIMARY KEY,
@@ -6,8 +6,7 @@ CREATE TABLE articles (
   slug TEXT NOT NULL,
   body TEXT NOT NULL,
   writer_id int NOT NULL,
-  section_id int NOT NULL,
-  -- section Section NOT NULL,
+  section Section NOT NULL,
   publication_date TIMESTAMP WITH TIME ZONE NOT NULL,
   preview TEXT,
   image_url TEXT,
@@ -15,9 +14,5 @@ CREATE TABLE articles (
   CONSTRAINT fk_writer
     FOREIGN KEY(writer_id)
       REFERENCES writers(id)
-      ON DELETE CASCADE,
-  CONSTRAINT fk_section
-    FOREIGN KEY(section_id)
-      REFERENCES sections(id)
       ON DELETE CASCADE
 )

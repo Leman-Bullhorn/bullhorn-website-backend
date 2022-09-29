@@ -4,7 +4,7 @@ use crate::error::{APIError, APIResult};
 use crate::gdrive::drive_v3_types::FilesService;
 use crate::gdrive::{self, ServerDriveFile};
 use crate::paginated::Paginated;
-use crate::section::{ClientSection, DBSection, ServerSection};
+use crate::section::Section;
 use crate::writer::{ClientWriter, DBWriter, ServerWriter};
 use chrono::Utc;
 use diesel::prelude::*;
@@ -198,7 +198,6 @@ pub fn get_writer_id_articles(
     user: Option<AdminUser>,
 ) -> Result<Json<Vec<ServerArticle>>, APIError> {
     use crate::schema::articles::dsl::{articles, writer_id};
-    use crate::schema::sections::dsl::sections;
     use crate::schema::writers::dsl::{id as writer_table_id, writers};
 
     let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
@@ -221,13 +220,12 @@ pub fn get_writer_id_articles(
     let ret_articles = articles
         .filter(writer_id.eq(id))
         .inner_join(writers)
-        .inner_join(sections)
-        .load::<(DBArticle, DBWriter, DBSection)>(db_connection)
+        .load::<(DBArticle, DBWriter)>(db_connection)
         .map_err(APIError::from)?;
 
     let mut output = Vec::new();
-    for (article, writer, section) in ret_articles {
-        output.push(ServerArticle::new(article, writer, section, user)?);
+    for (article, writer) in ret_articles {
+        output.push(ServerArticle::new(article, writer, user)?);
     }
     Ok(Json(output))
 }
@@ -264,17 +262,6 @@ pub fn post_articles(
             _ => APIError::from(err),
         })?;
 
-    let section = sections::table
-        .filter(sections::id.eq(article.section_id))
-        .first::<DBSection>(db_connection)
-        .map_err(|err| match err {
-            DieselError::NotFound => APIError::new(
-                Status::NotFound,
-                format!("No section with id {} found.", article.section_id),
-            ),
-            _ => APIError::from(err),
-        })?;
-
     let mut slug = article.content.headline.replace(' ', "-");
     slug.make_ascii_lowercase();
     let slug = SLUG_REGEX.replace_all(&slug, "");
@@ -286,7 +273,7 @@ pub fn post_articles(
             articles::headline.eq(article.content.headline.clone()),
             articles::slug.eq(slug),
             articles::writer_id.eq(article.writer_id),
-            articles::section_id.eq(article.section_id),
+            articles::section.eq(article.section),
             articles::publication_date.eq(Utc::now().naive_utc()),
             articles::preview.eq(article.preview),
             articles::image_url.eq(article.image_url),
@@ -295,36 +282,39 @@ pub fn post_articles(
         .get_results::<DBArticle>(db_connection)?
         .swap_remove(0);
 
-    let ret_article = ServerArticle::with_content(
-        inserted_article,
-        article.into_inner().content,
-        writer,
-        section,
-        user,
-    );
+    let ret_article =
+        ServerArticle::with_content(inserted_article, article.into_inner().content, writer, user);
 
     let location = uri!("/api", get_article(ret_article.id)).to_string();
 
     Ok(status::Created::new(location).body(Json(ret_article)))
 }
 
-use crate::schema::articles;
-#[derive(AsChangeset, Serialize, Deserialize)]
-#[table_name = "articles"]
-pub struct PatchArticle {
+#[derive(Serialize, Deserialize)]
+pub struct ArticlePatchArguments {
+    body: Option<ArticleContent>,
     writer_id: Option<i32>,
-    section_id: Option<i32>,
+    section: Option<Section>,
 }
 
 #[allow(clippy::extra_unused_lifetimes)]
 #[patch("/articles/<id>", data = "<new_article>")]
 pub fn patch_article_by_id(
     db_connection: &State<Mutex<PgConnection>>,
-    new_article: Option<Json<PatchArticle>>,
+    new_article: Option<Json<ArticlePatchArguments>>,
     id: i32,
     user: Option<AdminUser>,
 ) -> APIResult<()> {
     use crate::schema::articles;
+
+    #[derive(AsChangeset, Serialize, Deserialize)]
+    #[table_name = "articles"]
+    pub struct PatchArticle {
+        body: Option<String>,
+        writer_id: Option<i32>,
+        section: Option<Section>,
+    }
+
     user.ok_or_else(APIError::unauthorized)?;
 
     let new_article = match new_article {
@@ -339,8 +329,20 @@ pub fn patch_article_by_id(
 
     let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
 
+    let body = if let Some(body) = &new_article.body {
+        Some(serde_json::to_string(body).map_err(|_| APIError::default())?)
+    } else {
+        None
+    };
+
+    let patch = PatchArticle {
+        body,
+        section: new_article.section,
+        writer_id: new_article.writer_id,
+    };
+
     diesel::update(articles::table.find(id))
-        .set(new_article.0)
+        .set(patch)
         .execute(db_connection)
         .map_err(|err| match err {
             DieselError::NotFound => {
@@ -360,7 +362,6 @@ pub fn get_articles(
     user: Option<AdminUser>,
 ) -> Result<Paginated<Vec<ServerArticle>>, APIError> {
     use crate::schema::articles::dsl::{articles, publication_date};
-    use crate::schema::sections::dsl::sections;
     use crate::schema::writers::dsl::writers;
 
     let limit = limit.unwrap_or(10);
@@ -378,16 +379,15 @@ pub fn get_articles(
 
     let ret_articles = articles
         .inner_join(writers)
-        .inner_join(sections)
         .order(publication_date.desc())
         .offset((page - 1) * limit)
         .limit(limit)
-        .load::<(DBArticle, DBWriter, DBSection)>(db_connection)?;
+        .load::<(DBArticle, DBWriter)>(db_connection)?;
 
     let mut output = Vec::with_capacity(ret_articles.len());
 
-    for (article, writer, section) in ret_articles {
-        output.push(ServerArticle::new(article, writer, section, user)?);
+    for (article, writer) in ret_articles {
+        output.push(ServerArticle::new(article, writer, user)?);
     }
 
     Ok(Paginated::new(output, limit, page, article_count))
@@ -432,7 +432,6 @@ pub fn get_article(
     user: Option<AdminUser>,
 ) -> Result<Json<ServerArticle>, APIError> {
     use crate::schema::articles::dsl::{articles, id as article_id};
-    use crate::schema::sections::dsl::sections;
     use crate::schema::writers::dsl::writers;
 
     let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
@@ -440,8 +439,7 @@ pub fn get_article(
     let ret_article = articles
         .filter(article_id.eq(id))
         .inner_join(writers)
-        .inner_join(sections)
-        .first::<(DBArticle, DBWriter, DBSection)>(db_connection)
+        .first::<(DBArticle, DBWriter)>(db_connection)
         .map_err(|err| match err {
             DieselError::NotFound => {
                 APIError::new(Status::NotFound, format!("No article with id {}.", id))
@@ -452,7 +450,6 @@ pub fn get_article(
     Ok(Json(ServerArticle::new(
         ret_article.0,
         ret_article.1,
-        ret_article.2,
         user,
     )?))
 }
@@ -464,7 +461,6 @@ pub fn get_article_by_slug(
     user: Option<AdminUser>,
 ) -> Result<Json<ServerArticle>, APIError> {
     use crate::schema::articles::dsl::{articles, slug as article_slug};
-    use crate::schema::sections::dsl::sections;
     use crate::schema::writers::dsl::writers;
 
     let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
@@ -472,8 +468,7 @@ pub fn get_article_by_slug(
     let ret_article = articles
         .filter(article_slug.eq(slug))
         .inner_join(writers)
-        .inner_join(sections)
-        .first::<(DBArticle, DBWriter, DBSection)>(db_connection)
+        .first::<(DBArticle, DBWriter)>(db_connection)
         .map_err(|err| match err {
             DieselError::NotFound => {
                 APIError::new(Status::NotFound, format!("No article with slug {}.", slug))
@@ -484,71 +479,8 @@ pub fn get_article_by_slug(
     Ok(Json(ServerArticle::new(
         ret_article.0,
         ret_article.1,
-        ret_article.2,
         user,
     )?))
-}
-
-#[get("/sections")]
-pub fn get_sections(
-    db_connection: &State<Mutex<PgConnection>>,
-) -> Result<Json<Vec<ServerSection>>, APIError> {
-    use crate::schema::sections::dsl::sections;
-
-    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
-
-    sections
-        .load::<ServerSection>(db_connection)
-        .map_err(APIError::from)
-        .map(Json)
-}
-
-#[get("/section/<id>")]
-pub fn get_section(
-    db_connection: &State<Mutex<PgConnection>>,
-    id: i32,
-) -> Result<Json<ServerSection>, APIError> {
-    use crate::schema::sections::dsl::{id as section_id, sections};
-
-    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
-
-    sections
-        .filter(section_id.eq(id))
-        .first::<ServerSection>(db_connection)
-        .map_err(APIError::from)
-        .map(Json)
-}
-
-#[post("/sections", data = "<section>")]
-pub fn post_section(
-    db_connection: &State<Mutex<PgConnection>>,
-    section: Option<Json<ClientSection<'_>>>,
-    user: Option<AdminUser>,
-) -> Result<status::Created<Json<ServerSection>>, APIError> {
-    use crate::schema::sections::dsl::sections;
-
-    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
-
-    user.ok_or_else(APIError::unauthorized)?;
-
-    let section = match section {
-        Some(section) => section,
-        None => {
-            return Err(APIError::new(
-                Status::BadRequest,
-                "Invalid section format.".into(),
-            ))
-        }
-    };
-
-    let inserted_section = diesel::insert_into(sections)
-        .values(section.into_inner())
-        .get_results::<DBSection>(db_connection)?
-        .swap_remove(0);
-
-    let location = uri!("/api", get_section(inserted_section.id)).to_string();
-
-    Ok(status::Created::new(location).body(Json(inserted_section)))
 }
 
 #[post("/login", data = "<login_info>")]

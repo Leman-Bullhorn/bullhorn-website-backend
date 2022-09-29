@@ -1,7 +1,8 @@
 use crate::auth::AdminUser;
 use crate::error::{APIError, APIResult};
+use crate::schema::articles;
+use crate::section::Section;
 use crate::writer::DBWriter;
-use crate::{schema::articles, section::DBSection};
 use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 
@@ -45,7 +46,7 @@ pub struct ArticleSpan {
     pub font_weight: String,
 }
 
-#[derive(Queryable, Debug, Serialize, Associations)]
+#[derive(Queryable, Debug, Serialize, Associations, Identifiable)]
 #[belongs_to(DBWriter, foreign_key = "writer_id")]
 #[table_name = "articles"]
 pub struct DBArticle {
@@ -54,7 +55,7 @@ pub struct DBArticle {
     pub slug: String,
     pub body: String,
     pub writer_id: i32,
-    pub section_id: i32,
+    pub section: Section,
     pub publication_date: DateTime<Utc>,
     pub preview: Option<String>,
     pub image_url: Option<String>,
@@ -69,7 +70,7 @@ pub struct ServerArticle {
     pub slug: String,
     pub content: ArticleContent,
     pub writer: DBWriter,
-    pub section: DBSection,
+    pub section: Section,
     pub publication_date: DateTime<Utc>,
     pub preview: String,
     pub image_url: String,
@@ -77,12 +78,7 @@ pub struct ServerArticle {
 }
 
 impl ServerArticle {
-    pub fn new(
-        article: DBArticle,
-        writer: DBWriter,
-        section: DBSection,
-        user: Option<AdminUser>,
-    ) -> APIResult<Self> {
+    pub fn new(article: DBArticle, writer: DBWriter, user: Option<AdminUser>) -> APIResult<Self> {
         let content = serde_json::from_str(&article.body).map_err(|_| APIError::default())?;
         Ok(ServerArticle {
             id: article.id,
@@ -90,7 +86,7 @@ impl ServerArticle {
             slug: article.slug,
             content,
             writer,
-            section,
+            section: article.section,
             publication_date: article.publication_date,
             preview: article.preview.unwrap_or_default(),
             image_url: article.image_url.unwrap_or_default(),
@@ -102,7 +98,6 @@ impl ServerArticle {
         article: DBArticle,
         content: ArticleContent,
         writer: DBWriter,
-        section: DBSection,
         user: Option<AdminUser>,
     ) -> Self {
         ServerArticle {
@@ -111,7 +106,7 @@ impl ServerArticle {
             slug: article.slug,
             content,
             writer,
-            section,
+            section: article.section,
             publication_date: article.publication_date,
             preview: article.preview.unwrap_or_default(),
             image_url: article.image_url.unwrap_or_default(),
@@ -125,7 +120,7 @@ impl ServerArticle {
 pub struct ClientArticle<'a> {
     pub content: ArticleContent,
     pub writer_id: i32,
-    pub section_id: i32,
+    pub section: Section,
     pub preview: Option<&'a str>,
     pub image_url: Option<&'a str>,
     pub drive_file_id: Option<&'a str>,
