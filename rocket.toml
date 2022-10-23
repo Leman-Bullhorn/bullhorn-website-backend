@@ -1,0 +1,2 @@
+[global]
+    limits = { file = 2097152}

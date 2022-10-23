@@ -21,8 +21,9 @@ table! {
         id -> Int4,
         first_name -> Varchar,
         last_name -> Varchar,
-        bio -> Text,
         title -> Varchar,
+        bio -> Nullable<Text>,
+        image_url -> Nullable<Text>,
     }
 }
 
