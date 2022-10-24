@@ -16,7 +16,7 @@ use rocket::fs::TempFile;
 use rocket::http::{Cookie, CookieJar, SameSite, Status};
 use rocket::response::status;
 use rocket::serde::json::Json;
-use rocket::{delete, get, patch, post, uri, FromForm, State};
+use rocket::{delete, get, patch, post, uri, State};
 use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
@@ -47,14 +47,14 @@ pub async fn index(build_dir: &State<String>, files: PathBuf) -> Option<NamedFil
     }
 }
 
-#[post("/writers/headshot", data = "<headshot>")]
-pub async fn post_headshot(
-    mut headshot: Form<TempFile<'_>>,
+#[post("/upload_picture", data = "<picture>")]
+pub async fn upload_picture(
+    mut picture: Form<TempFile<'_>>,
     user: Option<AdminUser>,
 ) -> APIResult<status::Created<()>> {
     user.ok_or_else(APIError::unauthorized)?;
 
-    let content_type = headshot.content_type();
+    let content_type = picture.content_type();
 
     if !matches!(content_type, Some(x) if x.is_jpeg()) {
         return Err(APIError::new(
@@ -85,7 +85,7 @@ pub async fn post_headshot(
         std::fs::create_dir_all(parent).unwrap();
     }
 
-    headshot
+    picture
         .persist_to(path)
         .await
         .map_err(|_| APIError::default())?;
@@ -94,6 +94,54 @@ pub async fn post_headshot(
 
     Ok(status::Created::new(loc))
 }
+
+// #[post("/writers/headshot", data = "<headshot>")]
+// pub async fn post_headshot(
+//     mut headshot: Form<TempFile<'_>>,
+//     user: Option<AdminUser>,
+// ) -> APIResult<status::Created<()>> {
+//     user.ok_or_else(APIError::unauthorized)?;
+
+//     let content_type = headshot.content_type();
+
+//     if !matches!(content_type, Some(x) if x.is_jpeg()) {
+//         return Err(APIError::new(
+//             Status::BadRequest,
+//             "Required image type is JPEG".into(),
+//         ));
+//     }
+
+//     let image_dir = std::env::var("ARTICLE_IMAGE_PATH")
+//         .expect("environment variable ARTICLE_IMAGE_PATH should be set");
+
+//     let extension = "jpeg";
+
+//     let file_name = Uuid::new_v4().to_string();
+
+//     let utc_now = chrono::Utc::now();
+//     let (year, month) = (utc_now.year(), utc_now.month());
+
+//     // image path: images/<year>/<month>/<name>.<extension>
+//     let mut path = PathBuf::from(image_dir);
+//     path.push(year.to_string());
+//     path.push(month.to_string());
+//     path.push(&file_name);
+//     path.set_extension(extension);
+
+//     // Create the image directory if it doesn't exist.
+//     if let Some(parent) = path.parent() {
+//         std::fs::create_dir_all(parent).unwrap();
+//     }
+
+//     headshot
+//         .persist_to(path)
+//         .await
+//         .map_err(|_| APIError::default())?;
+
+//     let loc = format!("/image/{year}/{month}/{file_name}.jpeg");
+
+//     Ok(status::Created::new(loc))
+// }
 
 #[post("/writers", data = "<writer>")]
 pub fn post_writers(
@@ -347,6 +395,7 @@ pub struct ArticlePatchArguments {
     body: Option<ArticleContent>,
     writer_id: Option<i32>,
     section: Option<Section>,
+    image_url: Option<String>,
 }
 
 #[allow(clippy::extra_unused_lifetimes)]
@@ -365,6 +414,7 @@ pub fn patch_article_by_id(
         body: Option<String>,
         writer_id: Option<i32>,
         section: Option<Section>,
+        image_url: Option<String>,
     }
 
     user.ok_or_else(APIError::unauthorized)?;
@@ -391,6 +441,7 @@ pub fn patch_article_by_id(
         body,
         section: new_article.section,
         writer_id: new_article.writer_id,
+        image_url: new_article.image_url.clone(),
     };
 
     diesel::update(articles::table.find(id))
