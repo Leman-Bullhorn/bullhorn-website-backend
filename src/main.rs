@@ -41,6 +41,7 @@ async fn rocket() -> _ {
                 endpoints::patch_article_by_id,
                 endpoints::get_writer,
                 endpoints::upload_picture,
+                endpoints::get_featured_article,
                 endpoints::post_writers,
                 endpoints::patch_writer_by_id,
                 endpoints::api_fallback,

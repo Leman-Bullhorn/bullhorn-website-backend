@@ -378,6 +378,7 @@ pub fn post_articles(
             articles::preview.eq(article.preview),
             articles::image_url.eq(article.image_url),
             articles::drive_file_id.eq(article.drive_file_id),
+            articles::featured.eq(article.featured.unwrap_or(false)),
         ))
         .get_results::<DBArticle>(db_connection)?
         .swap_remove(0);
@@ -390,12 +391,38 @@ pub fn post_articles(
     Ok(status::Created::new(location).body(Json(ret_article)))
 }
 
+#[get("/articles/featured")]
+pub fn get_featured_article(
+    db_connection: &State<Mutex<PgConnection>>,
+    user: Option<AdminUser>,
+) -> APIResult<Json<ServerArticle>> {
+    use crate::schema::articles::dsl::{articles, featured};
+    use crate::schema::writers::dsl::writers;
+
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
+
+    let featured_article = articles
+        .filter(featured.eq(true))
+        .inner_join(writers)
+        .first::<(DBArticle, DBWriter)>(db_connection)
+        .map_err(|err| match err {
+            DieselError::NotFound => {
+                APIError::new(Status::NotFound, "There is no featured article".to_string())
+            }
+            _ => APIError::from(err),
+        })?;
+
+    let server_article = ServerArticle::new(featured_article.0, featured_article.1, user)?;
+    Ok(Json(server_article))
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct ArticlePatchArguments {
     body: Option<ArticleContent>,
     writer_id: Option<i32>,
     section: Option<Section>,
     image_url: Option<String>,
+    featured: Option<bool>,
 }
 
 #[allow(clippy::extra_unused_lifetimes)]
@@ -415,6 +442,7 @@ pub fn patch_article_by_id(
         writer_id: Option<i32>,
         section: Option<Section>,
         image_url: Option<String>,
+        featured: Option<bool>,
     }
 
     user.ok_or_else(APIError::unauthorized)?;
@@ -442,6 +470,7 @@ pub fn patch_article_by_id(
         section: new_article.section,
         writer_id: new_article.writer_id,
         image_url: new_article.image_url.clone(),
+        featured: new_article.featured,
     };
 
     diesel::update(articles::table.find(id))

@@ -60,6 +60,7 @@ pub struct DBArticle {
     pub preview: Option<String>,
     pub image_url: Option<String>,
     pub drive_file_id: Option<String>,
+    pub featured: bool,
 }
 
 /// What the client receives when they request an article.
@@ -75,6 +76,7 @@ pub struct ServerArticle {
     pub preview: String,
     pub image_url: String,
     pub drive_file_id: Option<String>,
+    pub featured: bool,
 }
 
 impl ServerArticle {
@@ -91,6 +93,7 @@ impl ServerArticle {
             preview: article.preview.unwrap_or_default(),
             image_url: article.image_url.unwrap_or_default(),
             drive_file_id: user.and(article.drive_file_id),
+            featured: article.featured,
         })
     }
 
@@ -111,6 +114,7 @@ impl ServerArticle {
             preview: article.preview.unwrap_or_default(),
             image_url: article.image_url.unwrap_or_default(),
             drive_file_id: user.and(article.drive_file_id),
+            featured: article.featured,
         }
     }
 }
@@ -124,4 +128,5 @@ pub struct ClientArticle<'a> {
     pub preview: Option<&'a str>,
     pub image_url: Option<&'a str>,
     pub drive_file_id: Option<&'a str>,
+    pub featured: Option<bool>,
 }

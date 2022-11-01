@@ -13,6 +13,7 @@ table! {
         preview -> Nullable<Text>,
         image_url -> Nullable<Text>,
         drive_file_id -> Nullable<Text>,
+        featured -> Bool,
     }
 }
 

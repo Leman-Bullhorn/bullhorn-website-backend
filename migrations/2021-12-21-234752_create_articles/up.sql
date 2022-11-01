@@ -11,6 +11,7 @@ CREATE TABLE articles (
   preview TEXT,
   image_url TEXT,
   drive_file_id TEXT,
+  featured BOOLEAN NOT NULL DEFAULT FALSE,
   CONSTRAINT fk_writer
     FOREIGN KEY(writer_id)
       REFERENCES writers(id)
