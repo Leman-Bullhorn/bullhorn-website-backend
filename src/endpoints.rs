@@ -38,11 +38,11 @@ pub async fn index(build_dir: &State<String>, files: PathBuf) -> Option<NamedFil
     let path = Path::new(&**build_dir).join(files);
 
     if path.is_dir() {
-        open_index(&**build_dir).await
+        open_index(build_dir).await
     } else {
         match NamedFile::open(path).await.ok() {
             Some(file) => Some(file),
-            None => open_index(&**build_dir).await,
+            None => open_index(build_dir).await,
         }
     }
 }
