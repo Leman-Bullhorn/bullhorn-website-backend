@@ -375,7 +375,7 @@ pub fn post_articles(
             articles::writer_id.eq(article.writer_id),
             articles::section.eq(article.section),
             articles::publication_date.eq(Utc::now().naive_utc()),
-            articles::preview.eq(article.preview),
+            articles::focus.eq(article.focus),
             articles::image_url.eq(article.image_url),
             articles::drive_file_id.eq(article.drive_file_id),
             articles::featured.eq(article.featured.unwrap_or(false)),

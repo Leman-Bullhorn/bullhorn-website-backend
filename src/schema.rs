@@ -5,12 +5,12 @@ table! {
     articles (id) {
         id -> Int4,
         headline -> Varchar,
+        focus -> Text,
         slug -> Text,
         body -> Text,
         writer_id -> Int4,
         section -> SectionMapping,
         publication_date -> Timestamptz,
-        preview -> Nullable<Text>,
         image_url -> Nullable<Text>,
         drive_file_id -> Nullable<Text>,
         featured -> Bool,
