@@ -1,5 +1,5 @@
 use crate::article::{ArticleContent, ClientArticle, DBArticle, ServerArticle};
-use crate::auth::{create_jwt, AdminUser, LoginInfo, Role, COOKIE_SESSION_TOKEN};
+use crate::auth::{create_jwt, AdminUser, LoginInfo, Role, User, COOKIE_SESSION_TOKEN};
 use crate::error::{APIError, APIResult};
 use crate::gdrive::drive_v3_types::FilesService;
 use crate::gdrive::{self, ServerDriveFile};
@@ -639,6 +639,11 @@ pub fn login(
     let admin_username = std::env::var("ADMIN_USERNAME").expect("ADMIN_USERNAME must be defined");
     let admin_password = std::env::var("ADMIN_PASSWORD").expect("ADMIN_PASSWORD must be defined");
 
+    let editor_username =
+        std::env::var("EDITOR_USERNAME").expect("EDITOR_USERNAME must be defined");
+    let editor_password =
+        std::env::var("EDITOR_PASSWORD").expect("EDITOR_PASSWORD must be defined");
+
     if login_info.username == admin_username && login_info.password == admin_password {
         create_jwt(Role::Admin)
             .map(|token| {
@@ -652,6 +657,19 @@ pub fn login(
                 "Admin"
             })
             .map_err(|_| APIError::default())
+    } else if login_info.username == editor_username && login_info.password == editor_password {
+        create_jwt(Role::Editor)
+            .map(|token| {
+                let cookie = Cookie::build(COOKIE_SESSION_TOKEN, token)
+                    .secure(true)
+                    .http_only(true)
+                    .same_site(SameSite::Strict);
+
+                jar.add(cookie.finish());
+
+                "Editor"
+            })
+            .map_err(|_| APIError::default())
     } else {
         Err(APIError::new(
             Status::Unauthorized,
@@ -661,10 +679,11 @@ pub fn login(
 }
 
 #[get("/current")]
-pub fn current_role(user: Option<AdminUser>) -> &'static str {
-    match user {
-        Some(_) => "Admin",
-        None => "Default",
+pub fn current_role(user: User) -> &'static str {
+    match user.0 {
+        Role::Admin => "Admin",
+        Role::Editor => "Editor",
+        Role::Default => "Default",
     }
 }
 

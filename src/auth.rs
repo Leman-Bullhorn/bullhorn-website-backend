@@ -7,6 +7,34 @@ use serde::{Deserialize, Serialize};
 
 pub const COOKIE_SESSION_TOKEN: &str = "session_token";
 
+pub struct User(pub Role);
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for User {
+    type Error = APIError;
+    async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let jwt_secret = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+
+        let jwt = match req.cookies().get(COOKIE_SESSION_TOKEN) {
+            Some(jwt) => jwt.value(),
+            None => return Outcome::Forward(()),
+        };
+
+        match decode::<Claims>(
+            jwt,
+            &DecodingKey::from_secret(jwt_secret.as_bytes()),
+            &Validation::new(Algorithm::HS512),
+        ) {
+            Ok(decoded_jwt) => match decoded_jwt.claims.role {
+                Role::Admin => Outcome::Success(User(Role::Admin)),
+                Role::Editor => Outcome::Success(User(Role::Editor)),
+                Role::Default => Outcome::Success(User(Role::Default)),
+            },
+            Err(_) => Outcome::Success(User(Role::Default)),
+        }
+    }
+}
+
 #[derive(Clone, Copy)]
 pub struct AdminUser;
 
@@ -39,6 +67,39 @@ impl<'r> FromRequest<'r> for AdminUser {
     }
 }
 
+#[derive(Clone, Copy)]
+pub struct EditorUser;
+
+#[rocket::async_trait]
+impl<'r> FromRequest<'r> for EditorUser {
+    type Error = APIError;
+
+    async fn from_request(req: &'r Request<'_>) -> Outcome<Self, Self::Error> {
+        let jwt_secret = std::env::var("JWT_SECRET").expect("JWT_SECRET must be set");
+
+        let jwt = match req.cookies().get(COOKIE_SESSION_TOKEN) {
+            Some(jwt) => jwt.value(),
+            None => return Outcome::Forward(()),
+        };
+
+        match decode::<Claims>(
+            jwt,
+            &DecodingKey::from_secret(jwt_secret.as_bytes()),
+            &Validation::new(Algorithm::HS512),
+        ) {
+            Ok(decoded_jwt) => {
+                if decoded_jwt.claims.role == Role::Admin || decoded_jwt.claims.role == Role::Editor
+                {
+                    Outcome::Success(EditorUser)
+                } else {
+                    Outcome::Forward(())
+                }
+            }
+            Err(_) => Outcome::Forward(()),
+        }
+    }
+}
+
 #[derive(Serialize, Deserialize)]
 struct Claims {
     role: Role,
@@ -48,6 +109,7 @@ struct Claims {
 #[derive(Eq, PartialEq, Serialize, Deserialize)]
 pub enum Role {
     Admin,
+    Editor,
     Default,
 }
 
