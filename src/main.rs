@@ -48,6 +48,7 @@ async fn rocket() -> _ {
                 endpoints::get_writer_by_name,
                 endpoints::get_writer_id_articles,
                 endpoints::get_article_by_slug,
+                endpoints::logout,
                 endpoints::login,
                 endpoints::current_role,
                 endpoints::delete_article,

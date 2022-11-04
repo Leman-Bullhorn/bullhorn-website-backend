@@ -615,6 +615,12 @@ pub fn get_article_by_slug(
     )?))
 }
 
+#[allow(clippy::let_unit_value)]
+#[post("/logout")]
+pub fn logout(jar: &CookieJar<'_>) {
+    jar.remove(Cookie::named(COOKIE_SESSION_TOKEN));
+}
+
 #[post("/login", data = "<login_info>")]
 pub fn login(
     jar: &CookieJar<'_>,
