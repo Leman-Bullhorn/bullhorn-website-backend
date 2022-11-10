@@ -765,7 +765,7 @@ pub async fn move_final_to_draft(
 pub async fn get_file_content(
     files_service: &State<FilesService>,
     file_id: &str,
-    user: Option<AdminUser>,
+    user: Option<EditorUser>,
 ) -> APIResult<Json<ArticleContent>> {
     user.ok_or_else(APIError::unauthorized)?;
 
