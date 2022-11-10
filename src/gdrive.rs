@@ -392,6 +392,9 @@ pub async fn get_article_content(
         let mut styles = get_style_attributes(paragraph);
 
         let text_alignment = styles.remove("text-align").unwrap_or_else(|| "left".into());
+        let text_indent = styles.remove("text-indent").unwrap_or_else(|| "0".into());
+        let margin_left = styles.remove("margin-left").unwrap_or_else(|| "0".into());
+        let margin_right = styles.remove("margin-right").unwrap_or_else(|| "0".into());
 
         let mut article_spans = Vec::new();
         let spans = paragraph
@@ -446,7 +449,10 @@ pub async fn get_article_content(
         }
 
         let article_paragraph = ArticleParagraph {
+            margin_left,
+            margin_right,
             text_alignment,
+            text_indent,
             spans: article_spans,
         };
         article_paragraphs.push(article_paragraph);

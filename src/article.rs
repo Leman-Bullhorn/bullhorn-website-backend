@@ -14,7 +14,10 @@ pub struct ArticleContent {
 
 #[derive(Serialize, Deserialize, Debug)]
 pub struct ArticleParagraph {
+    pub margin_left: String,
+    pub margin_right: String,
     pub text_alignment: String,
+    pub text_indent: String,
     pub spans: Vec<ArticleSpan>,
 }
 
