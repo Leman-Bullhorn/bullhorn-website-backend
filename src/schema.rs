@@ -2,6 +2,21 @@ table! {
     use crate::section::SectionMapping;
     use diesel::sql_types::*;
 
+    article_submission (id) {
+        id -> Int4,
+        headline -> Varchar,
+        focus -> Text,
+        section -> SectionMapping,
+        author_id -> Int4,
+        drive_file_id -> Text,
+        thumbnail_url -> Nullable<Text>,
+    }
+}
+
+table! {
+    use crate::section::SectionMapping;
+    use diesel::sql_types::*;
+
     articles (id) {
         id -> Int4,
         headline -> Varchar,
@@ -30,4 +45,4 @@ table! {
 
 joinable!(articles -> writers (writer_id));
 
-allow_tables_to_appear_in_same_query!(articles, writers,);
+allow_tables_to_appear_in_same_query!(article_submission, articles, writers,);

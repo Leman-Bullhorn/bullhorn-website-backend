@@ -2,6 +2,7 @@
 extern crate diesel;
 
 mod article;
+mod article_submission;
 mod auth;
 mod endpoints;
 mod error;
@@ -58,6 +59,9 @@ async fn rocket() -> _ {
                 endpoints::move_draft_to_final,
                 endpoints::move_final_to_draft,
                 endpoints::get_file_content,
+                endpoints::get_article_submissions,
+                endpoints::post_article_submission,
+                endpoints::delete_article_submission,
             ],
         )
         .mount("/image", routes![endpoints::image_fallback])

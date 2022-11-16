@@ -1,4 +1,4 @@
-CREATE TYPE Section AS ENUM ('news', 'opinions', 'features', 'science', 'sports', 'arts', 'humor',);
+CREATE TYPE Section AS ENUM ('news', 'opinions', 'features', 'science', 'sports', 'arts', 'humor');
 
 CREATE TABLE articles (
   id SERIAL PRIMARY KEY,

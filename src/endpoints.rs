@@ -1,5 +1,8 @@
 use crate::article::{ArticleContent, ClientArticle, DBArticle, ServerArticle};
-use crate::auth::{create_jwt, AdminUser, LoginInfo, Role, User, COOKIE_SESSION_TOKEN};
+use crate::article_submission::{
+    ClientArticleSubmission, DBArticleSubmission, ServerArticleSubmission,
+};
+use crate::auth::{create_jwt, AdminUser, EditorUser, LoginInfo, Role, User, COOKIE_SESSION_TOKEN};
 use crate::error::{APIError, APIResult};
 use crate::gdrive::drive_v3_types::FilesService;
 use crate::gdrive::{self, ServerDriveFile};
@@ -50,7 +53,7 @@ pub async fn index(build_dir: &State<String>, files: PathBuf) -> Option<NamedFil
 #[post("/upload_picture", data = "<picture>")]
 pub async fn upload_picture(
     mut picture: Form<TempFile<'_>>,
-    user: Option<AdminUser>,
+    user: Option<EditorUser>,
 ) -> APIResult<status::Created<()>> {
     user.ok_or_else(APIError::unauthorized)?;
 
@@ -365,6 +368,8 @@ pub fn post_articles(
     let mut slug = article.content.headline.replace(' ', "-");
     slug.make_ascii_lowercase();
     let slug = SLUG_REGEX.replace_all(&slug, "");
+
+    println!("{slug:?}");
 
     let inserted_article = diesel::insert_into(articles::table)
         .values((
@@ -773,6 +778,66 @@ pub async fn get_file_content(
         .await
         .map(Json)
         .map_err(|_| APIError::default())
+}
+
+#[get("/submission")]
+pub fn get_article_submissions(
+    db_connection: &State<Mutex<PgConnection>>,
+    user: Option<AdminUser>,
+) -> APIResult<Json<Vec<ServerArticleSubmission>>> {
+    use crate::schema::article_submission;
+
+    user.ok_or_else(APIError::unauthorized)?;
+
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
+
+    article_submission::table
+        .load::<DBArticleSubmission>(db_connection)
+        .map(Json)
+        .map_err(APIError::from)
+}
+
+#[post("/submission", data = "<submission>")]
+pub fn post_article_submission(
+    db_connection: &State<Mutex<PgConnection>>,
+    submission: Option<Json<ClientArticleSubmission>>,
+    user: Option<EditorUser>,
+) -> APIResult<Json<ServerArticleSubmission>> {
+    use crate::schema::article_submission;
+
+    user.ok_or_else(APIError::unauthorized)?;
+
+    let Some(submission) = submission else {
+        return Err(APIError::new(
+        Status::BadRequest,
+        "Invalid writer format.".into()))
+    };
+
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
+
+    let inserted = diesel::insert_into(article_submission::table)
+        .values(submission.into_inner())
+        .get_results::<DBArticleSubmission>(db_connection)?
+        .swap_remove(0);
+
+    Ok(Json(inserted))
+}
+
+#[delete("/submission/<id>")]
+pub fn delete_article_submission(
+    db_connection: &State<Mutex<PgConnection>>,
+    id: i32,
+    user: Option<AdminUser>,
+) -> APIResult<()> {
+    use crate::schema::article_submission;
+    user.ok_or_else(APIError::unauthorized)?;
+
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
+
+    diesel::delete(article_submission::table.filter(article_submission::id.eq(id)))
+        .execute(db_connection)?;
+
+    Ok(())
 }
 
 // TODO: This isn't really an API so this probably isn't the best 404 response
