@@ -24,7 +24,7 @@ use std::sync::Mutex;
 use uuid::Uuid;
 
 lazy_static::lazy_static! {
-    static ref SLUG_REGEX: regex::Regex = regex::Regex::new("/[^A-Za-z0-9 -]/g").unwrap();
+    static ref SLUG_REGEX: regex::Regex = regex::Regex::new(r"[^A-Za-z0-9 -]").unwrap();
 }
 
 #[get("/<files..>", rank = 10000)]
