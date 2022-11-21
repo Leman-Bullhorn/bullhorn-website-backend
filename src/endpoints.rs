@@ -530,6 +530,54 @@ pub fn get_articles(
     Ok(Paginated::new(output, limit, page, article_count))
 }
 
+#[get("/sectionArticles/<section>?<limit>&<page>")]
+pub fn get_articles_by_section(
+    db_connection: &State<Mutex<PgConnection>>,
+    section: Option<Section>,
+    limit: Option<i64>,
+    page: Option<i64>,
+    user: Option<AdminUser>,
+) -> APIResult<Paginated<Vec<ServerArticle>>> {
+    use crate::schema::articles::dsl::{articles, publication_date, section as articleSection};
+    use crate::schema::writers::dsl::writers;
+
+    let Some(section) = section else {
+        return Err(APIError::new(Status::BadRequest, "Invalid section name".into()))
+    };
+
+    let limit = limit.unwrap_or(10);
+    let page = page.unwrap_or(1);
+    if page <= 0 {
+        return Err(APIError::new(
+            Status::BadRequest,
+            "Page must be positive".into(),
+        ));
+    }
+
+    let db_connection = &*db_connection.lock().map_err(|_| APIError::default())?;
+
+    let article_count: i64 = articles
+        .filter(articleSection.eq(section))
+        .count()
+        .get_result(db_connection)?;
+
+    let ret_articles = articles
+        .filter(articleSection.eq(section))
+        .inner_join(writers)
+        .order(publication_date.desc())
+        .offset((page - 1) * limit)
+        .limit(limit)
+        .load::<(DBArticle, DBWriter)>(db_connection)?;
+
+    let mut output = Vec::with_capacity(ret_articles.len());
+
+    for (article, writer) in ret_articles {
+        output.push(ServerArticle::new(article, writer, user)?);
+    }
+
+    Ok(Paginated::new(output, limit, page, article_count))
+}
+
 #[delete("/articles/<id>")]
 pub fn delete_article(
     db_connection: &State<Mutex<PgConnection>>,

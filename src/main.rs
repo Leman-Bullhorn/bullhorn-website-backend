@@ -37,6 +37,7 @@ async fn rocket() -> _ {
             "/api",
             routes![
                 endpoints::get_articles,
+                endpoints::get_articles_by_section,
                 endpoints::get_article,
                 endpoints::post_articles,
                 endpoints::patch_article_by_id,
